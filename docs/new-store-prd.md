@@ -11,7 +11,8 @@ This PRD defines the requirements for a proof of concept (PoC) to be completed i
 - **Vercel**: Deployment and hosting platform.
 - **AI SDK**: For integrating AI capabilities (by Vercel).
 - **TypeScript**: Language for type safety and maintainability.
-- **GPT-4o**: AI model for generating store JSON.
+- **GPT-4o**: AI model for generating store JSON and image descriptions.
+- `text-embedding-3-small`: embedding model for image descriptions.
 
 ---
 
@@ -61,7 +62,7 @@ This PRD defines the requirements for a proof of concept (PoC) to be completed i
     - Theme (from a predefined set).
     - 2-3 categories (e.g., "Men," "Women" for clothing).
     - Full definitions for 6-12 products including names, summaries, prices.
-    - Descriptions/hints for required images (e.g., for HeroSection, FeatureSection, and individual products) instead of direct image URLs.
+    - Generates **image placeholder URLs** (see Section 4.2.1) for required images (e.g., for HeroSection, FeatureSection, and individual products) instead of direct image URLs.
 - **Prompt Engineering:**  
   - Uses the provided prototype prompt as a starting point.  
   - Ensures valid JSON with OKLCH colors for the global palette and hex colors for section themes.  
@@ -73,8 +74,10 @@ This PRD defines the requirements for a proof of concept (PoC) to be completed i
 ### 3.3 API Integration
 - **Backend Processing:**
   - Before sending to YourNextStore, the backend intercepts the AI-generated JSON.
-  - It uses the image descriptions/hints provided by the AI to select appropriate image URLs from a predefined library via in-memory vector similarity search against pre-computed embeddings.
-  - It inserts these selected image URLs into the JSON object.
+  - It identifies special **image placeholder URLs** (see Section 4.2.1) within the JSON structure.
+  - It parses these placeholders to extract the AI-generated description for the desired image.
+  - It uses these *specific* descriptions to select appropriate image URLs from a predefined library via in-memory vector similarity search against pre-computed embeddings (associated with the library images' descriptions).
+  - It inserts these selected image URLs into the JSON object, replacing the original placeholder URLs.
 - **Send JSON to YourNextStore:**
   - POST the **finalized** JSON (with image URLs included) to the YourNextStore API endpoint.
 - **Handle API Response:**  
@@ -91,13 +94,13 @@ This PRD defines the requirements for a proof of concept (PoC) to be completed i
   - Display an error message if the API fails or the store cannot load.  
 
 ### 3.5 Product Images & Layout Images:
-  - A library of ~200 categorized images (e.g., fashion, electronics, lifestyle) stored statically.
-  - Each image has an associated descriptive text (e.g., "Minimalist workspace with laptop and plant", "Close-up of a steaming cup of coffee").
-  - Embeddings for these descriptions are pre-computed during the build process and stored as static data (e.g., JSON file).
+  - A library of ~200 categorized images (e.g., fashion, electronics, lifestyle) stored statically within the project repository.
+  - Each image has an associated descriptive text (e.g., "Minimalist workspace with laptop and plant", "Close-up of a steaming cup of coffee") stored alongside, likely in a JSON file.
+  - Embeddings for these descriptions are pre-computed by a developer using a dedicated script *before* runtime (e.g., during development) and stored as static data (e.g., another JSON file) committed to the repository. This process is *not* part of the automated build pipeline.
 
 **Rationale:**
 - Predefined assets simplify AI tasks, ensuring consistency and accelerating development.
-- Pre-computing embeddings and using in-memory search provides efficient image selection without external dependencies.
+- Pre-computing embeddings offline and using in-memory search provides efficient image selection without external dependencies or build-time overhead.
 
 ---
 
@@ -114,13 +117,49 @@ This PRD defines the requirements for a proof of concept (PoC) to be completed i
 - **AI Integration:**  
   - Use AI SDK to call GPT-4o with the user's prompt and prototype prompt.  
 - **JSON Generation:**  
-  - AI generates the initial JSON structure, including descriptive hints for required images.
-- **Image Selection (Backend):**
-  - Implements an in-memory vector search mechanism.
-  - Loads pre-computed embeddings (generated during build time) for the predefined image library.
-  - Takes image descriptions/hints from the AI's JSON output, calculates query embeddings.
-  - Performs similarity search to find the best matching image URLs from the library.
-  - Injects the selected image URLs back into the JSON.
+  - AI generates the initial JSON structure, including specially formatted **image placeholder URLs** where final image `src` values are needed. See Section 4.2.1 for details.
+
+#### 4.2.1 Image Placeholder and Selection Strategy
+
+To communicate image requirements from the AI agent to the backend for lookup in the static library, this system uses a specific placeholder URL format embedded directly within the standard `image.src` fields of the generated JSON.
+
+- **Placeholder Format:** The AI agent will be instructed to generate URLs in the following format for any required image:
+  `https://yns.img?description=<URL-encoded description>`
+  Where `<URL-encoded description>` is the AI's generated textual description of the desired image, properly URL-encoded (e.g., spaces become `%20`).
+
+- **Example within JSON:**
+  ```json
+  {
+    "id": "HeroSection",
+    "data": {
+      "title": "Artisan Coffee Roasters",
+      "description": "Discover expertly roasted beans.",
+      "button": { "label": "Explore Blends", "path": "/products" },
+      "image": {
+        "src": "https://yns.img?description=close-up%20of%20freshly%20roasted%20coffee%20beans%20spilling%20from%20a%20burlap%20sack",
+        "alt": "Freshly roasted coffee beans" // AI can still generate alt text
+      }
+    },
+    "theme": { "backgroundColor": "#f5f0e8", "color": "#4a2c2a" }
+  }
+  ```
+
+- **Rationale:**
+  - **Standard Structure:** Leverages the existing `image.src` field, minimizing changes to the JSON schema the AI needs to learn and produce.
+  - **Clear Signal:** Provides an unambiguous, machine-parseable signal to the backend that an image lookup and replacement are required for this specific field.
+  - **Encapsulation:** Keeps the description of the required image directly associated with the field where the final URL belongs.
+  - **Simplified Backend Logic:** Makes it easy for the backend to find all required image lookups by simply scanning for URLs starting with `https://yns.img?`.
+
+- **Backend Image Selection (Implementation):**
+  - The backend API route handler intercepts the JSON from the AI.
+  - It scans the JSON for `src` fields containing URLs matching the `https://yns.img?description=` pattern.
+  - For each match, it extracts and URL-decodes the `description` parameter.
+  - It calculates an embedding for this description using `text-embedding-3-small`.
+  - It performs a similarity search using this query embedding against the pre-computed embeddings of the static image library (see Section 3.5).
+  - It selects the URL of the best-matching image from the library.
+  - It replaces the original placeholder URL (e.g., `https://yns.img?...`) in the JSON with the selected static image URL (e.g., `/images/library/coffee_beans_close_up.jpg`).
+  - Implements fallback logic (e.g., using a default placeholder image URL or logging a warning) if no suitable match is found above a certain threshold.
+
 - **API Call:**  
   - Send JSON to YourNextStore's API and process the response.  
 
@@ -143,10 +182,10 @@ This PRD defines the requirements for a proof of concept (PoC) to be completed i
   - No layout customization in v0.
 - **Predefined Themes and Images:**
   - Themes are selected from a predefined set.
-  - Images (layout and product) are selected by the backend from a predefined library using descriptions provided by the AI agent via vector search.
+  - Images (layout and product) are selected by the backend from a predefined library using **AI-generated descriptions embedded in placeholder URLs** (see Section 4.2.1) via vector search.
 - **AI Output:**
   - Generates 2-3 categories and full definitions for 6-12 products (excluding final image URLs).
-  - Provides descriptive text hints for all required images.
+  - Provides **image placeholder URLs** containing descriptive text for all required images.
 - **API Response:**  
   - Returns a domain name or an error message.  
 
@@ -158,12 +197,14 @@ This PRD defines the requirements for a proof of concept (PoC) to be completed i
 - **Timeline:** 10 days with three senior engineers.  
 - **No Product Variants:** Products lack variants (e.g., size, color).  
 - **Minimal Error Handling:** Prioritizes core flow; edge cases are deferred.  
+- **Static Image Embeddings:** Image description embeddings are generated offline by developers and committed; they are not generated dynamically or during the build.
+- **Image Description Format:** AI must generate image requirements using the specific placeholder URL format defined in Section 4.2.1.
 
 **Areas for Further Investigation:**  
 - **Minimal Set of Paths:** Validate if `/collection/[slug]` is essential for the core PoC functionality or can be deferred.
-- **Image Descriptions and Embeddings:** Ensure high-quality image descriptions and a robust script for pre-computing embeddings.
-- **AI Prompt Refinement:** Test and iterate the prototype prompt for consistent, valid JSON outputs, including effective image descriptions/hints.
-- **Error Handling:** Explore edge cases (e.g., invalid inputs, API downtime) during development.
+- **Image Descriptions and Matching Quality:** Ensure high-quality image descriptions in the static library and test the effectiveness of matching them against AI-generated descriptions extracted from placeholder URLs.
+- **AI Prompt Refinement:** Test and iterate the prototype prompt for consistent, valid JSON outputs, including correctly formatted image placeholder URLs with effective descriptions suitable for vector search.
+- **Error Handling:** Explore edge cases (e.g., invalid inputs, API downtime, image search fallback logic) during development.
 
 ---
 
@@ -172,19 +213,20 @@ This PRD defines the requirements for a proof of concept (PoC) to be completed i
 The PoC will be delivered in four phases over 10 days:
 
 ### Phase 1: Core Infrastructure and AI Integration (Days 1-3)
-- Set up Next.js project with Vercel deployment.  
-- Integrate AI SDK and GPT-4o for JSON generation.  
-- Implement the prototype prompt and test initial outputs.  
+- Set up Next.js project with Vercel deployment.
+- **Develop Image Library and Embedding Script:** Create the initial image library (~50-100 images) with descriptions in a JSON file. Develop and run the script to pre-compute and store embeddings for these descriptions (`text-embedding-3-small`). Commit image files and JSON data (descriptions, embeddings) to the repository.
+- Integrate AI SDK and GPT-4o for JSON generation (initially without image placeholders).
+- Implement the prototype prompt and test initial JSON structure outputs.
 
-### Phase 2: UI and User Flow (Days 4-5)
-- Build the two-column UI (prompt input with examples on the left, iframe preview on the right).  
-- Add predefined example buttons (e.g., "Fashion Store").  
-- Implement basic form validation and error handling.  
+### Phase 2: UI, User Flow, and Image Placeholder Generation (Days 4-5)
+- Build the two-column UI (prompt input with examples on the left, iframe preview on the right).
+- Add predefined example buttons (e.g., "Fashion Store").
+- Implement basic form validation and error handling.
+- Refine AI prompt to generate **image placeholder URLs** (as defined in Sec 4.2.1) for necessary sections.
 
-### Phase 3: API Integration and Preview (Days 6-7)
-- Integrate with YourNextStore's API to send JSON and retrieve the store domain.  
-- Embed the store preview in an iframe using the returned domain.  
-- Handle API errors and display user feedback.  
+### Phase 3: Backend Image Selection and API Integration (Days 6-7)
+- Implement backend logic to parse **image placeholder URLs**, load static embeddings, perform vector search based on extracted descriptions, and inject final image URLs into the JSON object (as defined in Sec 4.2.1).
+- Integrate with YourNextStore's API to send the finalized JSON and retrieve the store domain.
 
 ### Phase 4: Testing and Refinement (Days 8-10)
 - Test end-to-end flow with various inputs (broad and specific).  
@@ -445,9 +487,9 @@ Based on the user's natural language prompt:
 7. Output only the JSON object as your response.
 ```
 
-This prompt has several simplifications (e.g. the hardcoded logo/ogimage URLs and the illustrative hardcoded HeroSection image URL) that will be addressed during the development of this project, following the image selection strategy outlined in Sections 3.3 and 4.2.
+This prompt has several simplifications (e.g. the hardcoded logo/ogimage URLs) that will be addressed during the development of this project, following the image selection strategy outlined in Section 4.2.1 (backend selecting images from a static library based on *AI-generated descriptions extracted from placeholder URLs*, matched against *pre-computed descriptions* in the library).
 
 **Areas for Further Investigation:**
-- Test the prompt with diverse inputs and refine it to ensure consistent, valid JSON outputs, including useful image descriptions.
-- Evaluate the effectiveness and performance of the in-memory vector search implementation.
+- Test the prompt with diverse inputs and refine it to ensure consistent, valid JSON outputs, including useful and correctly formatted image placeholder URLs suitable for the vector search matching process.
+- Evaluate the effectiveness and performance of the in-memory vector search implementation for matching AI descriptions (from placeholders) to library descriptions.
 
