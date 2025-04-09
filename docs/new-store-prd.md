@@ -79,7 +79,7 @@ This PRD defines the requirements for a proof of concept (PoC) to be completed i
   - It uses these *specific* descriptions to select appropriate image URLs from a predefined library via in-memory vector similarity search against pre-computed embeddings (associated with the library images' descriptions).
   - It inserts these selected image URLs into the JSON object, replacing the original placeholder URLs.
 - **Send JSON to YourNextStore:**
-  - POST the **finalized** JSON (with image URLs included) to the YourNextStore API endpoint.
+  - POST the **finalized** JSON (with image URLs included) to the YourNextStore API endpoint. The YourNextStore API is solely responsible for validating the structure and content of the submitted JSON; no pre-validation occurs in the `store.new` backend for this PoC.
 - **Handle API Response:**  
   - Success: Retrieve the domain name and load the store in the iframe.  
   - Error: Display a user-friendly message (e.g., "Unable to generate store. Please try again.").  
@@ -154,11 +154,11 @@ To communicate image requirements from the AI agent to the backend for lookup in
   - The backend API route handler intercepts the JSON from the AI.
   - It scans the JSON for `src` fields containing URLs matching the `https://yns.img?description=` pattern.
   - For each match, it extracts and URL-decodes the `description` parameter.
-  - It calculates an embedding for this description using `text-embedding-3-small`.
-  - It performs a similarity search using this query embedding against the pre-computed embeddings of the static image library (see Section 3.5).
-  - It selects the URL of the best-matching image from the library.
+  - It calculates an embedding for this description using `text-embedding-3-small` (via the Vercel AI SDK `embed` function).
+  - It performs a simple linear similarity search (calculating cosine similarity) using primitives from the Vercel AI SDK (e.g., `cosineSimilarity` function, see [AI SDK Embeddings Docs](https://sdk.vercel.ai/docs/ai-sdk-core/embeddings#embedding-similarity)) against the pre-computed embeddings of the static image library (see Section 3.5).
+  - It selects the URL of the best-matching image from the library based on the highest similarity score.
   - It replaces the original placeholder URL (e.g., `https://yns.img?...`) in the JSON with the selected static image URL (e.g., `/images/library/coffee_beans_close_up.jpg`).
-  - Implements fallback logic (e.g., using a default placeholder image URL or logging a warning) if no suitable match is found above a certain threshold.
+  - Implements fallback logic (e.g., using a default placeholder image URL or logging a warning) if no suitable match is found above a certain similarity threshold.
 
 - **API Call:**  
   - Send JSON to YourNextStore's API and process the response.  
@@ -199,12 +199,14 @@ To communicate image requirements from the AI agent to the backend for lookup in
 - **Minimal Error Handling:** Prioritizes core flow; edge cases are deferred.  
 - **Static Image Embeddings:** Image description embeddings are generated offline by developers and committed; they are not generated dynamically or during the build.
 - **Image Description Format:** AI must generate image requirements using the specific placeholder URL format defined in Section 4.2.1.
+- **JSON Validation:** For the PoC, JSON validation is intentionally deferred to the receiving YourNextStore API. No separate validation layer will be built within the `store.new` backend.
+- **Detailed Error Handling:** Specific strategies for handling various error conditions (e.g., AI failures, image search fallbacks, API errors) will be defined during development.
 
 **Areas for Further Investigation:**  
 - **Minimal Set of Paths:** Validate if `/collection/[slug]` is essential for the core PoC functionality or can be deferred.
 - **Image Descriptions and Matching Quality:** Ensure high-quality image descriptions in the static library and test the effectiveness of matching them against AI-generated descriptions extracted from placeholder URLs.
 - **AI Prompt Refinement:** Test and iterate the prototype prompt for consistent, valid JSON outputs, including correctly formatted image placeholder URLs with effective descriptions suitable for vector search.
-- **Error Handling:** Explore edge cases (e.g., invalid inputs, API downtime, image search fallback logic) during development.
+- **Error Handling:** Explore edge cases (e.g., invalid inputs, API downtime, image search fallback logic) during development. Detailed error handling strategies beyond the basic success/failure paths will be clarified during the implementation phases.
 
 ---
 
@@ -225,7 +227,7 @@ The PoC will be delivered in four phases over 10 days:
 - Refine AI prompt to generate **image placeholder URLs** (as defined in Sec 4.2.1) for necessary sections.
 
 ### Phase 3: Backend Image Selection and API Integration (Days 6-7)
-- Implement backend logic to parse **image placeholder URLs**, load static embeddings, perform vector search based on extracted descriptions, and inject final image URLs into the JSON object (as defined in Sec 4.2.1).
+- Implement backend logic to parse **image placeholder URLs**, load static embeddings, generate query embeddings using the Vercel AI SDK (`embed`), perform linear vector search using Vercel AI SDK primitives (`cosineSimilarity`), select the best match, and inject final image URLs into the JSON object (as defined in Sec 4.2.1). Implement basic fallback logic.
 - Integrate with YourNextStore's API to send the finalized JSON and retrieve the store domain.
 
 ### Phase 4: Testing and Refinement (Days 8-10)
