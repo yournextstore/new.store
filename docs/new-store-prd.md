@@ -244,7 +244,7 @@ The PoC will be delivered in four phases over 10 days:
 
 Below is an example of a prototype of the prompt to the AI agent; it should serve as a starting point, and illustration but it's not the final prompt by any means. It defines the JSON structure, section types, and color rules, and illustrates some detailed concepts and ideas how to prompt the AI agent.
 
-```
+`````markdown
 ## Prompt for AI Agent
 
 You are an AI agent tasked with generating a JSON description for an e-commerce store on the YourNextStore platform based on a user's natural language prompt describing their store. Your output must conform to the platform's JSON structure, which includes "paths" for page layouts and "settings" for global configurations. Below are the guidelines and structure you must follow.
@@ -487,7 +487,7 @@ Based on the user's natural language prompt:
 5. Populate "paths" with appropriate sections and data based on the user's description.
 6. Ensure the JSON is syntactically correct and includes all required fields.
 7. Output only the JSON object as your response.
-```
+`````
 
 This prompt has several simplifications (e.g. the hardcoded logo/ogimage URLs) that will be addressed during the development of this project, following the image selection strategy outlined in Section 4.2.1 (backend selecting images from a static library based on *AI-generated descriptions extracted from placeholder URLs*, matched against *pre-computed descriptions* in the library).
 
