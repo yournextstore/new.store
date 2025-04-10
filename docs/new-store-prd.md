@@ -215,25 +215,31 @@ To communicate image requirements from the AI agent to the backend for lookup in
 The PoC will be delivered in four phases over 10 days:
 
 ### Phase 1: Core Infrastructure and AI Integration (Days 1-3)
-- Set up Next.js project with Vercel deployment.
-- **Develop Image Library and Embedding Script:** Create the initial image library (~50-100 images) with descriptions in a JSON file. Develop and run the script to pre-compute and store embeddings for these descriptions (`text-embedding-3-small`). Commit image files and JSON data (descriptions, embeddings) to the repository.
-- Integrate AI SDK and GPT-4o for JSON generation (initially without image placeholders).
-- Implement the prototype prompt and test initial JSON structure outputs.
+- [x] Set up Next.js project with Vercel deployment, based on the Chat SDK by Vercel: https://github.com/vercel/ai-chatbot
+- [ ] Cleanup the project structure
+  - [ ] Remove auth
+- [ ] Integrate AI SDK and GPT-4o for JSON generation (initially without image placeholders).
+- [ ] Implement the prototype prompt and test initial JSON structure outputs.
+- [ ] **Develop Image Library and Embedding Script:** Create the initial image library (~50-100 images) with descriptions in a JSON file. Develop and run the script to pre-compute and store embeddings for these descriptions (`text-embedding-3-small`). Commit image files and JSON data (descriptions, embeddings) to the repository.
+  - [ ] Create a script to pre-compute and store embeddings for the image descriptions based on image files stored in the Git repo, at `./public/images/library/`.
+  - [ ] Commit the image files and JSON data (descriptions, embeddings) to the repository.
+  - [ ] Move image storage to Vercel Blob Storage.
+
 
 ### Phase 2: UI, User Flow, and Image Placeholder Generation (Days 4-5)
-- Build the two-column UI (prompt input with examples on the left, iframe preview on the right).
-- Add predefined example buttons (e.g., "Fashion Store").
-- Implement basic form validation and error handling.
-- Refine AI prompt to generate **image placeholder URLs** (as defined in Sec 4.2.1) for necessary sections.
+- [ ] Build the two-column UI (prompt input with examples on the left, iframe preview on the right).
+- [ ] Add predefined example buttons (e.g., "Fashion Store").
+- [ ] Implement basic form validation and error handling.
+- [ ] Refine AI prompt to generate **image placeholder URLs** (as defined in Sec 4.2.1) for necessary sections.
 
 ### Phase 3: Backend Image Selection and API Integration (Days 6-7)
-- Implement backend logic to parse **image placeholder URLs**, load static embeddings, generate query embeddings using the Vercel AI SDK (`embed`), perform linear vector search using Vercel AI SDK primitives (`cosineSimilarity`), select the best match, and inject final image URLs into the JSON object (as defined in Sec 4.2.1). Implement basic fallback logic.
-- Integrate with YourNextStore's API to send the finalized JSON and retrieve the store domain.
+- [ ] Implement backend logic to parse **image placeholder URLs**, load static embeddings, generate query embeddings using the Vercel AI SDK (`embed`), perform linear vector search using Vercel AI SDK primitives (`cosineSimilarity`), select the best match, and inject final image URLs into the JSON object (as defined in Sec 4.2.1). Implement basic fallback logic.
+- [ ] Integrate with YourNextStore's API to send the finalized JSON and retrieve the store domain.
 
 ### Phase 4: Testing and Refinement (Days 8-10)
-- Test end-to-end flow with various inputs (broad and specific).  
-- Refine the AI prompt based on output quality.  
-- Ensure the preview loads correctly and the store is functional.  
+- [ ] Test end-to-end flow with various inputs (broad and specific).
+- [ ] Refine the AI prompt based on output quality.
+- [ ] Ensure the preview loads correctly and the store is functional.
 
 **Rationale:**  
 - Phased development prioritizes critical components (AI and infrastructure), and getting end-to-end flow working early, allowing iterative refinement later.
