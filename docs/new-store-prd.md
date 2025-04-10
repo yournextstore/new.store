@@ -217,7 +217,7 @@ The PoC will be delivered in four phases over 10 days:
 ### Phase 1: Core Infrastructure and AI Integration (Days 1-3)
 - [x] Set up Next.js project with Vercel deployment, based on the Chat SDK by Vercel: https://github.com/vercel/ai-chatbot
 - [ ] Cleanup the initial project structure
-  - [ ] Disable auth protection for the routes and pages.
+  - [x] Disable auth protection for the routes and pages for faster development. We might want to add the auth protection back in the future.
   - [ ] Add `/` route that serves a homepage with a form for prompt input.
 - [ ] Integrate AI SDK and GPT-4o for JSON generation (initially without image placeholders).
 - [ ] Implement the prototype prompt and test initial JSON structure outputs.
