@@ -136,6 +136,8 @@ export async function POST(req: Request) {
     // Construct the full prompt for the AI
     const fullPrompt = prototypePrompt.replace('{user_prompt}', userPrompt);
 
+    const startTime = Date.now(); // Record start time
+
     // Call the AI using Vercel AI SDK
     const { text } = await generateText({
       // model: openai.chat('gpt-4o'), // Or use openai.chat if preferred
@@ -144,6 +146,9 @@ export async function POST(req: Request) {
       // Optional: Add system prompt or other parameters if needed
       system: "You are an AI assistant designed to output ONLY raw JSON data. Do not include any explanations, markdown formatting, or text outside the JSON structure.",
     });
+
+    const endTime = Date.now(); // Record end time
+    const generationTimeMs = endTime - startTime; // Calculate duration
 
     // Parse the AI's response as JSON
     let generatedJson;
@@ -155,8 +160,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Failed to parse AI response as JSON', details: (parseError as Error).message, rawResponse: text }, { status: 500 });
     }
 
-    // Return the generated JSON
-    return NextResponse.json(generatedJson);
+    // Return the generated JSON and the generation time
+    return NextResponse.json({ storeJson: generatedJson, generationTimeMs });
 
   } catch (error) {
     console.error('API Error:', error);

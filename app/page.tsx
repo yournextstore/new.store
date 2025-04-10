@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 export default function HomePage() {
   const [prompt, setPrompt] = useState('')
   const [responseJson, setResponseJson] = useState<object | null>(null)
+  const [generationTime, setGenerationTime] = useState<number | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -14,6 +15,7 @@ export default function HomePage() {
     setIsLoading(true)
     setError(null)
     setResponseJson(null)
+    setGenerationTime(null)
     try {
       const response = await fetch('/api/generate', {
         method: 'POST',
@@ -28,7 +30,8 @@ export default function HomePage() {
       }
 
       const data = await response.json()
-      setResponseJson(data)
+      setResponseJson(data.storeJson)
+      setGenerationTime(data.generationTimeMs)
     } catch (err: any) {
       setError(err.message || 'Failed to generate response')
     } finally {
@@ -72,7 +75,14 @@ export default function HomePage() {
 
       {/* Right Column: Preview Area */}
       <div className="border rounded-md bg-gray-50 p-4 overflow-auto">
-        <h2 className="text-lg font-semibold mb-2">API Response</h2>
+        <div className="flex justify-between items-center mb-2">
+          <h2 className="text-lg font-semibold">API Response</h2>
+          {generationTime !== null && (
+            <span className="text-sm text-gray-600">
+              Generated in {(generationTime / 1000).toFixed(2)}s
+            </span>
+          )}
+        </div>
         {isLoading && <p>Loading...</p>}
         {responseJson ? (
           <pre className="text-sm whitespace-pre-wrap break-words">
