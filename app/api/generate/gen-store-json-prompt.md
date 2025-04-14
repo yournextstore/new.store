@@ -359,6 +359,66 @@ Below are the section types supported by the YourNextStore platform, along with 
   - Use **hex format for all colors in section "theme" objects**.
 - **Consistency**: Ensure section themes complement the global palette.
 
+#### 6. Handling "products"
+
+- Generate product details aligned with the user's natural language prompt.
+- Each product must have "name", "summary", and "price". For product images, use the "imageUrl" field and pick images from the "library" of images provided below.
+- Always generate product data creatively if not explicitly provided, based on the store's theme.
+- Generate 4-12 products. ALWAYS.
+
+#### 7. Image Library
+
+The following is a library of images that can be used for product images in the format:
+
+```json
+{
+  "imageUrl": "https://fpvnqhp6jqce9ax6.public.blob.vercel-storage.com/images/019610fa-22f5-7637-bb96-aae581db5744/test/image-rcnmRcA1JDoTyqrWeT9zegZLPQR9qX.png",
+  "shortName": "Natural beige sneaker",
+  "alt": "Minimalist beige sneaker with a textured fabric upper, black laces, and a clean white sole, photographed on a light neutral background for an online store display."
+}
+```
+
+The library:
+
+```json
+{
+  "images": [
+    {
+      "imageUrl": "https://fpvnqhp6jqce9ax6.public.blob.vercel-storage.com/images/019610fa-22f5-7637-bb96-aae581db5744/test/image-rcnmRcA1JDoTyqrWeT9zegZLPQR9qX.png",
+      "shortName": "Natural beige sneaker",
+      "alt": "Minimalist beige sneaker with a textured fabric upper, black laces, and a clean white sole, photographed on a light neutral background for an online store display."
+    },
+    {
+      "imageUrl": "https://fpvnqhp6jqce9ax6.public.blob.vercel-storage.com/images/019610fa-22f5-7637-bb96-aae581db5744/test/image-qbZkaBag6P1VyXpBsgXetjiRiJRqe7.png",
+      "shortName": "Lavender Casual Sneaker",
+      "alt": "A minimalist low-top sneaker in soft lavender with a white sole and black eyelets, perfect for a subtle yet stylish look."
+    },
+    {
+      "imageUrl": "https://fpvnqhp6jqce9ax6.public.blob.vercel-storage.com/images/019610fa-22f5-7637-bb96-aae581db5744/test/image-mH7DdOrR1rceRbBTfZXrUMVzrnDDpq.png",
+      "shortName": "Mustard Yellow Everyday Sneaker",
+      "alt": "A vibrant mustard yellow sneaker with black laces and a white sole, designed for bold and energetic outfits."
+    },
+    {
+      "imageUrl": "https://fpvnqhp6jqce9ax6.public.blob.vercel-storage.com/images/019610fa-22f5-7637-bb96-aae581db5744/test/image-mH7DdOrR1rceRbBTfZXrUMVzrnDDpq.png",
+      "shortName": "Light Gray Urban Sneaker",
+      "alt": "A sleek light gray urban sneaker with matching laces and white sole, offering a clean and versatile style for everyday wear."
+    },
+    {
+      "imageUrl": "https://fpvnqhp6jqce9ax6.public.blob.vercel-storage.com/images/019610fa-22f5-7637-bb96-aae581db5744/test/image-CX8Ea6LapzoRsdKhI6h6h7vNwb3hH6.png",
+      "shortName": "Navy Blue Modern Sneaker",
+      "alt": "A deep navy sneaker with black accents and a white sole, balancing classic and contemporary aesthetics."
+    },
+    {
+      "imageUrl": "https://fpvnqhp6jqce9ax6.public.blob.vercel-storage.com/images/019610fa-22f5-7637-bb96-aae581db5744/test/image-saLKXICaYWchH844KPnPuZArnEG2wc.png",
+      "shortName": "Black and White Classic Sneaker",
+      "alt": "A timeless black sneaker with tonal laces and a crisp white sole, ideal for a modern, understated wardrobe"
+    },
+  ]
+}
+```
+
+Even if the store has completely different products, use the above library for product images, matching the best you can. The library will get expanded which will make matching easier over time.
+
 ---
 
 ### User Prompt
