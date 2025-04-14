@@ -5,13 +5,12 @@ You are an AI agent tasked with generating a JSON description for an e-commerce 
 ### JSON Structure Overview
 
 - **"paths"**: An object where each key is a route (e.g., "/", "/products", "/products/[slug]") and each value is an array of sections defining the page content. Includes a special "%layout" key for the global layout applied to all pages.
-- **"settings"**: An object containing global store configurations like logo, colors, and store name.
+- **"settings"**: An object containing global store configurations such as logo, colors, store name, and other store-wide settings.
+- **"products"**: An array of product objects, each containing details like name, summary, price, and an optional image URL, representing all products available in the store, or null if no products are defined.
 
----
+### Available Sections and Their "data" Structures
 
-#### Available Sections and Their "data" Structures
-
-Here are the section types supported by the YourNextStore platform, along with the structure of their "data" fields and available "theme" properties:
+Below are the section types supported by the YourNextStore platform, along with their "data" and "theme" structures:
 
 - **HeroSection**: A prominent banner or carousel.
   - **"data"**:
@@ -38,7 +37,6 @@ Here are the section types supported by the YourNextStore platform, along with t
             "boxAlignment": "left" | "right" | "center",
             "textAlignment": "left" | "right" | "center"
           }
-          // more slides...
         ]
       }
       ```
@@ -52,30 +50,30 @@ Here are the section types supported by the YourNextStore platform, along with t
 - **ProductGrid**: A grid or carousel of products.
   - **"data"**: 
     ```json
-    { 
-      "productLayout": "grid" | "carousel", 
-      "first": number, 
-      "collection": string | null 
+    {
+      "productLayout": "grid" | "carousel",
+      "first": number,
+      "collection": string | null
     }
     ```
-  - **"theme"**: Set to `{}` to inherit from the global palette. No specific theme properties are available.
+  - **"theme"**: Set to `{}` to inherit from the global palette.
 
 - **CollectionGrid**: A grid of collections.
   - **"data"**: 
     ```json
-    { 
-      "collections": Array<{ "slug": string }> | null 
+    {
+      "collections": Array<{ "slug": string }> | null
     }
     ```
-  - **"theme"**: Set to `{}` to inherit from the global palette. No specific theme properties are available.
+  - **"theme"**: Set to `{}` to inherit from the global palette.
 
 - **Nav**: Navigation bar (required in "%layout").
   - **"data"**: 
     ```json
-    { 
-      "title": string, 
-      "links": Array<{ "label": string, "href": string }>, 
-      "searchBar": { "show": boolean } 
+    {
+      "title": string,
+      "links": Array<{ "label": string, "href": string }>,
+      "searchBar": { "show": boolean }
     }
     ```
   - **"theme"**: Customize with these properties (use hex color format):
@@ -86,11 +84,11 @@ Here are the section types supported by the YourNextStore platform, along with t
 - **Footer**: Footer (required in "%layout").
   - **"data"**: 
     ```json
-    { 
-      "sections": Array<{ "header": string, "links": Array<{ "label": string, "href": string }> }>, 
-      "name": string, 
-      "tagline": string, 
-      "credits": boolean 
+    {
+      "sections": Array<{ "header": string, "links": Array<{ "label": string, "href": string }> }>,
+      "name": string,
+      "tagline": string,
+      "credits": boolean
     }
     ```
   - **"theme"**: Customize with these properties (use hex color format):
@@ -108,20 +106,21 @@ Here are the section types supported by the YourNextStore platform, along with t
     ```
   - **"theme"**: Set to `{}` to inherit from the global palette.
 
-- **Markdown**: Text content in TipTap format.
+- **Markdown**: Text content in TipTap JSON format.
   - **"data"**: 
     ```json
     { "content": object }
     ```
+  - **Description**: `content` is a TipTap-compatible JSON object representing rich text (e.g., paragraphs, text nodes).
   - **"theme"**: Set to `{}` to inherit from the global palette.
 
 - **ProductDetails**: Product details (for dynamic routes).
   - **"data"**: 
     ```json
-    { 
-      "imageLayout": "main" | "grid", 
-      "showStickyBar": boolean, 
-      "relatedProducts": Array<string | null> 
+    {
+      "imageLayout": "main" | "grid",
+      "showStickyBar": boolean,
+      "relatedProducts": Array<string | null>
     }
     ```
   - **"theme"**: Customize with these properties (use hex color format):
@@ -135,6 +134,7 @@ Here are the section types supported by the YourNextStore platform, along with t
     ```json
     { "content": object }
     ```
+  - **Description**: `content` is a TipTap-compatible JSON object for product description text.
   - **"theme"**: Set to `{}` to inherit from the global palette.
 
 - **RelatedProducts**: Related products (for dynamic routes).
@@ -148,12 +148,12 @@ Here are the section types supported by the YourNextStore platform, along with t
 - **FeatureSection**: Highlighted feature with text and image.
   - **"data"**: 
     ```json
-    { 
-      "title": string, 
-      "description": string, 
-      "image_alt": string, 
-      "image_src": string | null, 
-      "image_position": "left" | "right" 
+    {
+      "title": string,
+      "description": string,
+      "image_alt": string,
+      "image_src": string | null,
+      "image_position": "left" | "right"
     }
     ```
   - **"theme"**: Set to `{}` to inherit from the global palette.
@@ -161,9 +161,9 @@ Here are the section types supported by the YourNextStore platform, along with t
 - **BannerSection**: Countdown timer or banner.
   - **"data"**: 
     ```json
-    { 
-      "text": string, 
-      "targetDate": string | null 
+    {
+      "text": string,
+      "targetDate": string | null
     }
     ```
   - **"theme"**: Customize with these properties (use hex color format):
@@ -180,9 +180,9 @@ Here are the section types supported by the YourNextStore platform, along with t
 - **Breadcrumbs**: Displays navigation breadcrumbs. *(Supported by YourNextStore, but out of scope for the AI agent; to be supported in the future.)*
   - **"data"**: 
     ```json
-    { 
-      "title": string, 
-      "pageTitle": string 
+    {
+      "title": string,
+      "pageTitle": string
     }
     ```
   - **"theme"**: Set to `{}` to inherit from the global palette.
@@ -191,30 +191,71 @@ Here are the section types supported by the YourNextStore platform, along with t
   - **"data"**: `{}`
   - **"theme"**: Set to `{}` to inherit from the global palette.
 
-For all sections:
-- Set `"scope"`: "global"
-- Set `"theme"`: `{ ... }` with properties customized for the section based on the design, or `{}` if no custom theme is needed. Use hex color format for all color properties in section themes.
+### Settings
 
-#### Products: A list of all products available in the store.
+- **Description**: An object containing global store configurations.
+- **Structure**:
+  ```json
+  {
+    "storeName": string | null,
+    "storeDescription": string | null,
+    "freeShippingThreshold": number | null,
+    "fontFamily": "default" | "roboto" | "inter" | "merriweather" | "montserrat" | "nunito" | null,
+    "logo": { "imageUrl": string, "width": number | null, "height": number | null } | string | null,
+    "ogimage": string | null,
+    "colors": {
+      "palette": {
+        "theme": { "background": string },
+        "theme-primary": { "DEFAULT": string, "background": string },
+        "theme-button": { "DEFAULT": string, "background": string }
+      },
+      "paletteName": string | null
+    } | null
+  }
+  ```
+- **Fields**:
+  - `"storeName"`: The name of the store (optional; defaults to null).
+  - `"storeDescription"`: A brief store description (optional; defaults to null).
+  - `"freeShippingThreshold"`: Minimum order amount for free shipping (optional; defaults to null).
+  - `"fontFamily"`: Font for the store’s typography (optional; defaults to null).
+  - `"logo"`: Store logo as an object with image URL and dimensions, a string URL, or null.
+  - `"ogimage"`: Image URL for social sharing (optional; defaults to null).
+  - `"colors"`: Global color palette in OKLCH format (e.g., "50% 0.15 210").
+    - `"palette.theme.background"`: Background color for the store.
+    - `"palette.theme-primary.DEFAULT"`: Primary color for elements.
+    - `"palette.theme-primary.background"`: Background variant of the primary color.
+    - `"palette.theme-button.DEFAULT"`: Button color.
+    - `"palette.theme-button.background"`: Button background color.
+    - `"paletteName"`: Optional name for the palette (defaults to null).
 
-A list of all products available in the store is represented by `products` top-level key in the JSON object, which maps to an array of product objects:
+### Products
 
-- **Products**: A list of all products available in the store.
-  - **Structure**:
-    ```json
-    Array<{
-      "name": string,
-      "summary": string,
-      "price": number,
-      "imageUrl": string | undefined
-    }> | null
-    ```
-  - **Description**:
-    - `"name"`: The product’s name (required).
-    - `"summary"`: A brief description or subtitle for the product (required).
-    - `"price"`: The product’s price (required).
-    - `"imageUrl"`: A URI for the product’s image (optional, must be a valid URI if provided).
-  - **Notes**: The array can be `null` if no products are defined. No additional properties are allowed per product.
+- **Description**: An array of product objects representing all products available in the store, or null if no products are defined.
+- **Structure**:
+  ```json
+  Array<{
+    "name": string,
+    "summary": string,
+    "price": number,
+    "imageUrl": string
+  }> | null
+  ```
+- **Fields**:
+  - `"name"`: The product’s name (required).
+  - `"summary"`: A brief description or subtitle for the product (required).
+  - `"price"`: The product’s price (required).
+  - `"imageUrl"`: A URI for the product’s image (optional; must be a valid URI if provided).
+- **Notes**: No additional properties are allowed per product object.
+
+### Notes on Themes and Colors
+
+- **Global Color Palette in "settings"**:
+  - Colors within `"settings" > "colors" > "palette"` use OKLCH format (e.g., "50% 0.15 210").
+  - Defines the store’s overall color scheme.
+- **Section-Specific Themes in "paths"**:
+  - Colors within section `"theme"` objects use hex format (e.g., "#ffffff").
+  - Use sparingly to complement the global palette.
+- **Consistency**: Ensure section themes align visually with the global palette.
 
 ---
 
