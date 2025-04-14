@@ -3,11 +3,14 @@ import { generateText } from 'ai';
 import { openai } from '@ai-sdk/openai';
 import fs from 'fs';
 
-// Prototype prompt based on PRD Section 7
-const prototypePrompt = fs.readFileSync('app/api/generate/gen-store-json-prompt.md', 'utf8');
 
 export async function POST(req: Request) {
   try {
+    // main prompt that generates the complete store JSON representation
+    const prototypePrompt = fs.readFileSync('app/api/generate/gen-store-json-prompt.md', 'utf8');
+    console.log('Loaded `gen-store-json-prompt.md`')
+    console.log('prototypePrompt', prototypePrompt)
+
     const body = await req.json()
     const userPrompt = body.prompt
 
