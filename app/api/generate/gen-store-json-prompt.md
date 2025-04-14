@@ -9,83 +9,93 @@ You are an AI agent tasked with generating a JSON description for an e-commerce 
 
 ---
 
-### Available Sections and Their "data" Structures
+#### Available Sections and Their "data" Structures
 
-Here are the section types you can use, along with the structure of their "data" fields and available "theme" properties:
+Here are the section types supported by the YourNextStore platform, along with the structure of their "data" fields and available "theme" properties:
 
-- **HeroSection**: A prominent banner.
-  - **"data"**: 
-    ```json
-    {
-      "title": string,
-      "description": string,
-      "button": { "label": string, "path": string },
-      "image": { "src": string | null, "alt": string }
-    }
-    ```
+- **HeroSection**: A prominent banner or carousel.
+  - **"data"**:
+    - For a single slide:
+      ```json
+      {
+        "title": string,
+        "description": string,
+        "button": { "label": string, "path": string },
+        "image": { "src": string | null, "alt": string },
+        "boxAlignment": "left" | "right" | "center",
+        "textAlignment": "left" | "right" | "center"
+      }
+      ```
+    - For multiple slides:
+      ```json
+      {
+        "slides": [
+          {
+            "title": string,
+            "description": string,
+            "button": { "label": string, "path": string },
+            "image": { "src": string | null, "alt": string },
+            "boxAlignment": "left" | "right" | "center",
+            "textAlignment": "left" | "right" | "center"
+          }
+          // more slides...
+        ]
+      }
+      ```
   - **"theme"**: Customize with these properties (use hex color format, e.g., "#ffffff"):
     - `"backgroundColor"`: Background color.
     - `"color"`: Text color.
     - `"buttonBackgroundColor"`: Button background color.
     - `"buttonTextColor"`: Button text color.
     - `"buttonHoverBackgroundColor"`: Button background color on hover.
-  - **Example**:
-    ```json
-    {
-      "id": "HeroSection",
-      "data": { "title": "Welcome", "description": "Discover our products", "button": { "label": "Shop Now", "path": "/products" }, "image": { "src": "hero.jpg", "alt": "Hero Image" } },
-      "theme": { "backgroundColor": "#f0f0f0", "color": "#333333" }
-    }
-    ```
 
-- **ProductGrid**: A grid of products.
+- **ProductGrid**: A grid or carousel of products.
   - **"data"**: 
     ```json
-    { "first": number, "collection": string | null }
+    { 
+      "productLayout": "grid" | "carousel", 
+      "first": number, 
+      "collection": string | null 
+    }
     ```
   - **"theme"**: Set to `{}` to inherit from the global palette. No specific theme properties are available.
 
 - **CollectionGrid**: A grid of collections.
   - **"data"**: 
     ```json
-    { "collections": Array<{ "slug": string }> }
+    { 
+      "collections": Array<{ "slug": string }> | null 
+    }
     ```
   - **"theme"**: Set to `{}` to inherit from the global palette. No specific theme properties are available.
 
 - **Nav**: Navigation bar (required in "%layout").
   - **"data"**: 
     ```json
-    { "title": string | null, "links": Array<{ "label": string, "href": string }>, "searchBar": { "show": boolean } }
+    { 
+      "title": string, 
+      "links": Array<{ "label": string, "href": string }>, 
+      "searchBar": { "show": boolean } 
+    }
     ```
   - **"theme"**: Customize with these properties (use hex color format):
     - `"backgroundColor"`: Background color.
     - `"hoverBackgroundColor"`: Background color of links on hover.
     - `"color"`: Text color of the links.
-  - **Example**:
-    ```json
-    {
-      "id": "Nav",
-      "data": { "title": "My Store", "links": [{ "label": "Home", "href": "/" }], "searchBar": { "show": true } },
-      "theme": { "backgroundColor": "#ffffff", "color": "#007bff" }
-    }
-    ```
 
 - **Footer**: Footer (required in "%layout").
   - **"data"**: 
     ```json
-    { "sections": Array<{ "header": string, "links": Array<{ "label": string, "href": string }> }>, "name": string | null, "tagline": string | null, "credits": boolean }
+    { 
+      "sections": Array<{ "header": string, "links": Array<{ "label": string, "href": string }> }>, 
+      "name": string, 
+      "tagline": string, 
+      "credits": boolean 
+    }
     ```
   - **"theme"**: Customize with these properties (use hex color format):
     - `"backgroundColor"`: Background color.
     - `"color"`: Text color.
-  - **Example**:
-    ```json
-    {
-      "id": "Footer",
-      "data": { "sections": [{ "header": "Company", "links": [{ "label": "About Us", "href": "/about" }] }], "name": "My Store", "credits": true },
-      "theme": { "backgroundColor": "#333333", "color": "#ffffff" }
-    }
-    ```
 
 - **Children**: Placeholder for page content (required in "%layout").
   - **"data"**: `{}`
@@ -106,7 +116,14 @@ Here are the section types you can use, along with the structure of their "data"
   - **"theme"**: Set to `{}` to inherit from the global palette.
 
 - **ProductDetails**: Product details (for dynamic routes).
-  - **"data"**: `{}`
+  - **"data"**: 
+    ```json
+    { 
+      "imageLayout": "main" | "grid", 
+      "showStickyBar": boolean, 
+      "relatedProducts": Array<string | null> 
+    }
+    ```
   - **"theme"**: Customize with these properties (use hex color format):
     - `"color"`: Text color.
     - `"buttonBackgroundColor"`: Button background color.
@@ -114,7 +131,10 @@ Here are the section types you can use, along with the structure of their "data"
     - `"buttonTextColor"`: Button text color.
 
 - **ProductDescription**: Product description (for dynamic routes).
-  - **"data"**: `{}`
+  - **"data"**: 
+    ```json
+    { "content": object }
+    ```
   - **"theme"**: Set to `{}` to inherit from the global palette.
 
 - **RelatedProducts**: Related products (for dynamic routes).
@@ -128,21 +148,73 @@ Here are the section types you can use, along with the structure of their "data"
 - **FeatureSection**: Highlighted feature with text and image.
   - **"data"**: 
     ```json
-    { "title": string, "description": string, "image_alt": string, "image_src": string | null, "image_position": "left" | "right" }
+    { 
+      "title": string, 
+      "description": string, 
+      "image_alt": string, 
+      "image_src": string | null, 
+      "image_position": "left" | "right" 
+    }
     ```
   - **"theme"**: Set to `{}` to inherit from the global palette.
 
-- **CountdownWidget**: Countdown timer.
+- **BannerSection**: Countdown timer or banner.
   - **"data"**: 
     ```json
-    { "text": string, "targetDate": string | null }
+    { 
+      "text": string, 
+      "targetDate": string | null 
+    }
     ```
   - **"theme"**: Customize with these properties (use hex color format):
     - `"backgroundColor"`: Background color.
+    - `"textColor"`: Text color.
+
+- **CategoryMenu**: A menu for navigating categories. *(Supported by YourNextStore, but out of scope for the AI agent; to be supported in the future.)*
+  - **"data"**: `{}`
+  - **"theme"**: Customize with these properties (use hex color format):
+    - `"backgroundColor"`: Background color.
+    - `"hoverBackgroundColor"`: Background color of links on hover.
+    - `"color"`: Text color of the links.
+
+- **Breadcrumbs**: Displays navigation breadcrumbs. *(Supported by YourNextStore, but out of scope for the AI agent; to be supported in the future.)*
+  - **"data"**: 
+    ```json
+    { 
+      "title": string, 
+      "pageTitle": string 
+    }
+    ```
+  - **"theme"**: Set to `{}` to inherit from the global palette.
+
+- **QuestionList**: A list of questions or FAQs. *(Supported by YourNextStore, but out of scope for the AI agent; to be supported in the future.)*
+  - **"data"**: `{}`
+  - **"theme"**: Set to `{}` to inherit from the global palette.
 
 For all sections:
 - Set `"scope"`: "global"
-- Set `"theme"`: `{ ... }` with properties customized for the section based on the design you envision, or `{}` if no custom theme is needed. Use hex color format for all color properties in section themes.
+- Set `"theme"`: `{ ... }` with properties customized for the section based on the design, or `{}` if no custom theme is needed. Use hex color format for all color properties in section themes.
+
+#### Products: A list of all products available in the store.
+
+A list of all products available in the store is represented by `products` top-level key in the JSON object, which maps to an array of product objects:
+
+- **Products**: A list of all products available in the store.
+  - **Structure**:
+    ```json
+    Array<{
+      "name": string,
+      "summary": string,
+      "price": number,
+      "imageUrl": string | undefined
+    }> | null
+    ```
+  - **Description**:
+    - `"name"`: The product’s name (required).
+    - `"summary"`: A brief description or subtitle for the product (required).
+    - `"price"`: The product’s price (required).
+    - `"imageUrl"`: A URI for the product’s image (optional, must be a valid URI if provided).
+  - **Notes**: The array can be `null` if no products are defined. No additional properties are allowed per product.
 
 ---
 
@@ -171,14 +243,41 @@ For all sections:
 - Generate text (titles, descriptions, button labels) creatively based on the store's theme and user input.
 
 #### 3. Handling "settings"
-- **Hardcoded Values**: Use these exactly as provided:
-  - `"logo"`: { "width": 5049, "height": 3557, "imageUrl": "https://jtit1h3gvnocbut8.public.blob.vercel-storage.com/images/019426bf-cd97-72b8-8c5a-0b3bfc9b361e/test/pexels-bocman-33930-VTEooBiy8xhenQ0Z59NtiT9CeKN7HF.jpg" }
-  - `"ogimage"`: "https://jtit1h3gvnocbut8.public.blob.vercel-storage.com/images/019426bf-cd97-72b8-8c5a-0b3bfc9b361e/test/pexels-pixabay-279906-jfAMlw95x6DF81jYo250YQDlLuVShJ.jpg"
+- **Supported Values**:
+  - `"logo"`: An object with `"imageUrl"` (string, URI), `"width"` (number or null), `"height"` (number or null), or a string (URI), or null.
+  - `"ogimage"`: A string (URI) or null.
+  - `"colors"`: An object with a `"palette"` containing:
+    - `"theme"`: An object with `"background"` (OKLCH color, e.g., `"100% 0 0"`).
+    - `"theme-primary"`: An object with `"DEFAULT"` and `"background"` (OKLCH colors).
+    - `"theme-button"`: An object with `"DEFAULT"` and `"background"` (OKLCH colors).
+    - Optionally, `"paletteName"` (string or null).
+  - `"storeName"`: A string or null.
+  - `"storeDescription"`: A string, default "".
+  - `"fontFamily"`: One of `"default"`, `"roboto"`, `"inter"`, `"merriweather"`, `"montserrat"`, `"nunito"`, or null.
+  - `"freeShippingThreshold"`: A number or null.
 - **Generated Values**:
-  - `"colors"`: Generate a `"palette"` object based on the user's description of their store. Include keys such as `"theme"\,` `"theme-nav"\,` `"theme-button"\,` `"theme-footer"\,` and `"theme-primary"\,` each with sub-properties like `"DEFAULT"` and `"background"\,` Assign OKLCH color values (e.g., `"50% 0.1 120"`) that reflect the store's theme (e.g., modern, vintage). If no design preference is specified, use a default neutral palette.
-  - `"storeName"`: Extract from the user's prompt (e.g., "Tech Gadgets"); default to "Your Store" if not specified.
-  - `"storeDescription"`: Generate a brief description from the prompt (e.g., "Discover the best in electronics").
-  - `"fontFamily"`: Set to "merriweather" (default).
+  - `"colors"`: Generate a `"palette"` object based on the user’s store description. Include `"theme"`, `"theme-primary"`, and `"theme-button"`, each with OKLCH color values reflecting the store’s theme (e.g., modern, vintage). If no preference is specified, use a neutral palette.
+    - **Example**:
+      ```json
+      {
+        "colors": {
+          "palette": {
+            "theme": { "background": "100% 0 0" },
+            "theme-primary": { "DEFAULT": "50% 0.15 210", "background": "95% 0.05 210" },
+            "theme-button": { "DEFAULT": "50% 0.15 210", "background": "85% 0.1 210" }
+          }
+        }
+      }
+      ```
+  - `"storeName"`: Extract from the user’s prompt; default to "Your Store" if not specified.
+  - `"storeDescription"`: Generate a brief description from the prompt; default to "" if not provided.
+  - `"fontFamily"`: Set based on user preference or default to `"merriweather"`.
+- **Hardcoded Values**:
+  - Use hardcoded values for `"logo"` and `"ogimage"` as specified:
+    - `"logo"`: { "width": 5049, "height": 3557, "imageUrl": "https://jtit1h3gvnocbut8.public.blob.vercel-storage.com/images/019426bf-cd97-72b8-8c5a-0b3bfc9b361e/test/pexels-bocman-33930-VTEooBiy8xhenQ0Z59NtiT9CeKN7HF.jpg" }
+    - `"ogimage"`: "https://jtit1h3gvnocbut8.public.blob.vercel-storage.com/images/019426bf-cd97-72b8-8c5a-0b3bfc9b361e/test/pexels-pixabay-279906-jfAMlw95x6DF81jYo250YQDlLuVShJ.jpg"
+  - If the user doesn’t specify navigation, include links to "/", "/products", and mentioned collections.
+  - For `ProductGrid`, set `"first": 12` by default.
 
 #### 4. Defaults and Assumptions
 - If the user doesn't specify:
