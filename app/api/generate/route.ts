@@ -13,9 +13,14 @@ export async function POST(req: Request) {
 
     const body = await req.json()
     const userPrompt = body.prompt
+    const userId = body.userId
 
     if (!userPrompt || typeof userPrompt !== 'string') {
       return NextResponse.json({ error: 'Prompt is required and must be a string' }, { status: 400 })
+    }
+
+    if (!userId || typeof userId !== 'string') {
+      return NextResponse.json({ error: 'User ID is required and must be a string' }, { status: 400 });
     }
 
     // Check that {user_prompt} is present in the prototypePrompt
@@ -50,8 +55,44 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Failed to parse AI response as JSON', details: (parseError as Error).message, rawResponse: text }, { status: 500 });
     }
 
-    // Return the generated JSON and the generation time
-    return NextResponse.json({ storeJson: generatedJson, generationTimeMs });
+    // --- Call YNS API ---
+    const ynsApiUrl = `https://yns.cx/admin/ai-test/import?userId=${userId}`;
+    console.log(`Calling YNS API: ${ynsApiUrl}`);
+
+    try {
+      const ynsResponse = await fetch(ynsApiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(generatedJson), // Send the AI-generated JSON
+      });
+
+      if (!ynsResponse.ok) {
+        const errorText = await ynsResponse.text();
+        console.error(`YNS API Error (${ynsResponse.status}): ${errorText}`);
+        return NextResponse.json({ error: 'Failed to create store on YNS platform', details: errorText }, { status: ynsResponse.status });
+      }
+
+      const ynsResult = await ynsResponse.json();
+      console.log('YNS API Success Response:', ynsResult);
+
+      if (!ynsResult.url) {
+        console.error('YNS API response missing URL:', ynsResult);
+        return NextResponse.json({ error: 'YNS API did not return a store URL', details: ynsResult }, { status: 500 });
+      }
+
+      // Return the YNS store URL, the original JSON, and the generation time
+      return NextResponse.json({ storeUrl: ynsResult.url, storeJson: generatedJson, generationTimeMs });
+
+    } catch (ynsApiError) {
+      console.error('Error calling YNS API:', ynsApiError);
+      if (ynsApiError instanceof Error) {
+        return NextResponse.json({ error: 'Failed to communicate with YNS platform', details: ynsApiError.message }, { status: 500 });
+      }
+      return NextResponse.json({ error: 'Failed to communicate with YNS platform' }, { status: 500 });
+    }
+    // --- End YNS API Call ---
 
   } catch (error) {
     console.error('API Error:', error);
