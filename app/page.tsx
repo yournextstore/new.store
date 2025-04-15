@@ -3,6 +3,9 @@
 import { useState } from 'react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { okaidia } from 'react-syntax-highlighter/dist/esm/styles/prism'; // Correct style for Prism
+import { ClipboardIcon, CheckIcon } from 'lucide-react'; // For copy button icon
 
 export default function HomePage() {
   const [prompt, setPrompt] = useState('')
@@ -10,6 +13,7 @@ export default function HomePage() {
   const [generationTime, setGenerationTime] = useState<number | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [isCopied, setIsCopied] = useState(false) // State for copy feedback
 
   const handleGenerate = async () => {
     setIsLoading(true)
@@ -38,6 +42,20 @@ export default function HomePage() {
       setIsLoading(false)
     }
   }
+
+  const handleCopy = () => {
+    if (responseJson) {
+      navigator.clipboard.writeText(JSON.stringify(responseJson, null, 2))
+        .then(() => {
+          setIsCopied(true);
+          setTimeout(() => setIsCopied(false), 2000); // Reset after 2 seconds
+        })
+        .catch(err => {
+          console.error('Failed to copy text: ', err);
+          // Optionally show an error message to the user
+        });
+    }
+  };
 
   return (
     <div className="grid grid-cols-2 gap-4 h-screen p-4">
@@ -74,9 +92,27 @@ export default function HomePage() {
       </div>
 
       {/* Right Column: Preview Area */}
-      <div className="border rounded-md bg-gray-50 p-4 overflow-auto">
+      <div className="border rounded-md bg-gray-50 p-4 overflow-auto flex flex-col">
         <div className="flex justify-between items-center mb-2">
-          <h2 className="text-lg font-semibold">API Response</h2>
+          <div className="flex items-center space-x-2">
+            <h2 className="text-lg font-semibold">API Response</h2>
+            {responseJson && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleCopy}
+                className="h-6 w-6" // Adjust size as needed
+                aria-label="Copy JSON response"
+              >
+                {isCopied ? (
+                  <CheckIcon className="h-4 w-4 text-green-500" />
+                ) : (
+                  <ClipboardIcon className="h-4 w-4" />
+                )}
+              </Button>
+            )}
+             {isCopied && <span className="text-xs text-green-600">Copied!</span>}
+          </div>
           {generationTime !== null && (
             <span className="text-sm text-gray-600">
               Generated in {(generationTime / 1000).toFixed(2)}s
@@ -85,9 +121,16 @@ export default function HomePage() {
         </div>
         {isLoading && <p>Loading...</p>}
         {responseJson ? (
-          <pre className="text-sm whitespace-pre-wrap break-words">
-            {JSON.stringify(responseJson, null, 2)}
-          </pre>
+          <div className="flex-grow overflow-auto"> {/* Allow syntax highlighter to scroll */}
+            <SyntaxHighlighter
+              language="json"
+              style={okaidia} // Use the correct Prism style
+              customStyle={{ margin: 0, flexGrow: 1 }} // Remove default margin and allow growth
+              wrapLongLines={true} // Optional: wrap long lines
+            >
+              {JSON.stringify(responseJson, null, 2)}
+            </SyntaxHighlighter>
+          </div>
         ) : (
           !isLoading && <p className="text-gray-500">API response will appear here...</p>
         )}
