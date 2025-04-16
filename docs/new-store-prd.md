@@ -226,7 +226,7 @@ The PoC will be delivered in four phases over 10 days:
   - [x] Download the initial images from the toy image scratchpad and store them in the `./public/images/library/` folder.
   - [x] Create a script to generate textual descriptions for the images and pre-compute and store embeddings for the image descriptions based on image files stored in the Git repo, at `./public/images/library/`.
   - [x] Commit the image files and JSON data (descriptions, embeddings) to the repository.
-  - [ ] Move image storage to Vercel Blob Storage.
+  - [x] Move image storage to Vercel Blob Storage.
 
 
 ### Phase 2: UI, User Flow, and Image Placeholder Generation (Days 4-5)

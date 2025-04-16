@@ -6,6 +6,7 @@ import { embed, generateObject, EmbeddingModel } from 'ai';
 import { z } from 'zod';
 import cliProgress from 'cli-progress';
 import Table from 'cli-table3';
+import { put } from '@vercel/blob';
 
 // Load environment variables from .env file
 dotenv.config();
@@ -31,6 +32,16 @@ const DESCRIPTION_MODEL = openai('gpt-4o');
 const API_TIMEOUT_MS = 60000;
 const MAX_RETRIES = 3;
 
+// Check for Vercel Blob token and URL
+if (!process.env.BLOB_READ_WRITE_TOKEN) {
+  console.error('Error: BLOB_READ_WRITE_TOKEN environment variable is not set.');
+  process.exit(1);
+}
+if (!process.env.BLOB_URL) {
+  console.error('Error: BLOB_URL environment variable is not set.');
+  process.exit(1);
+}
+
 // --- Zod Schema for Structured Output ---
 const descriptionSchema = z.object({
   description: z.string().describe('Detailed description of the image focusing on visual elements, style, colors, and potential category.'),
@@ -40,6 +51,7 @@ const descriptionSchema = z.object({
 // --- Types ---
 interface ImageData {
   path: string; // Relative path from /public
+  url: string; // Added: Public URL from Vercel Blob
   description: string;
   shortName: string;
   embedding: number[];
@@ -100,9 +112,9 @@ async function ensureDirectoryExists(filePath: string): Promise<void> {
 // --- Main Execution ---
 
 async function main() {
-  console.log('Starting image description, name, and embedding generation...');
+  console.log('Starting image description, name, embedding generation, and blob upload...');
 
-  // 1. Ensure API Key is set
+  // 1. Ensure API Keys are set
   if (!process.env.OPENAI_API_KEY) {
     console.error('Error: OPENAI_API_KEY environment variable is not set.');
     process.exit(1);
@@ -141,6 +153,17 @@ async function main() {
       // Read image file
       const imageBuffer = await fs.readFile(imagePath);
 
+      // --- Vercel Blob Upload (Using allowOverwrite) ---
+      const blobPathname = `library/${filename}`;
+
+      // Upload the new version, allowing overwrite.
+      const blob = await put(blobPathname, imageBuffer, {
+        access: 'public',
+        allowOverwrite: true,
+      });
+      const blobUrl = blob.url;
+      // --- End Vercel Blob Upload ---
+
       // Generate structured description and shortName
       const { object: generatedData } = await generateObject({
         model: DESCRIPTION_MODEL,
@@ -167,6 +190,7 @@ async function main() {
 
       results.push({
         path: `/${relativePath}`,
+        url: blobUrl,
         description: generatedData.description,
         shortName: generatedData.shortName,
         embedding,
@@ -192,17 +216,18 @@ async function main() {
   if (results.length > 0) {
     console.log('\n--- Generated Content Summary ---');
     const table = new Table({
-      head: ['Filename', 'Short Name', 'Description'],
-      colWidths: [30, 30, 70], // Adjust widths as needed
+      head: ['Filename', 'Short Name', 'Description', 'Blob URL'],
+      colWidths: [30, 25, 50, 40],
       wordWrap: true,
-      style: { head: ['cyan'] } // Optional styling
+      style: { head: ['cyan'] }
     });
 
     results.forEach(result => {
       table.push([
         path.basename(result.path),
         result.shortName,
-        result.description
+        result.description,
+        result.url
       ]);
     });
 
@@ -216,7 +241,7 @@ async function main() {
       const jsonData = JSON.stringify(results, null, 2);
       await fs.writeFile(OUTPUT_DATA_FILE, jsonData, 'utf-8');
       console.log(`
-Successfully generated data for ${results.length} images.`);
+Successfully generated data and uploaded ${results.length} images to Vercel Blob.`);
       console.log(`Data saved to: ${OUTPUT_DATA_FILE}`);
     } catch (error) {
       console.error(`\nError writing data to ${OUTPUT_DATA_FILE}:`, error);
