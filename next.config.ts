@@ -11,6 +11,14 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  async rewrites() {
+    return [
+      {
+        source: '/iframe/:subdomain/:path*',
+        destination: 'https://:subdomain.yns.cx/:path*',
+      },
+    ];
+  },
 };
 
 export default nextConfig;
