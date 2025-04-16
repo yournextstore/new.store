@@ -230,8 +230,8 @@ The PoC will be delivered in four phases over 10 days:
 
 
 ### Phase 2: UI, User Flow, and Image Placeholder Generation (Days 4-5)
-- [ ] Build the two-column UI (prompt input with examples on the left, iframe preview on the right).
-- [ ] Add predefined example buttons (e.g., "Fashion Store").
+- [x] Build the two-column UI (prompt input with examples on the left, iframe preview on the right).
+- [x] Add predefined example buttons (e.g., "Fashion Store").
 - [ ] Implement basic form validation and error handling.
 - [ ] Refine AI prompt to generate **image placeholder URLs** (as defined in Sec 4.2.1) for necessary sections.
 
