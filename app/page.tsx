@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Label } from "@/components/ui/label"
 import { Input } from '@/components/ui/input'
@@ -14,6 +14,23 @@ const availableUsers = [
   { id: 'eLJ7gEFnW3axnIEGbMAtCSAbpiwwOhZc', name: 'gkk.dev' }
   // Add more users here later
 ];
+
+const Timer = () => {
+  const [start, setStart] = useState(0);
+  const [time, setTime] = useState(0);
+
+  useEffect(() => {
+    setStart(Date.now());
+    const interval = setInterval(() => {
+      setTime(Date.now());
+    }, 50);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  return <>{((time - start) / 1000).toFixed(2)}s</>;
+};
+
 
 export default function HomePage() {
   const [prompt, setPrompt] = useState('')
@@ -133,7 +150,7 @@ export default function HomePage() {
       <div className="border rounded-md bg-gray-50 p-4 overflow-auto flex flex-col">
         <div className="flex justify-between items-center mb-2">
           <div className="flex items-center space-x-2">
-            <h2 className="text-lg font-semibold">API Response</h2>
+            <h2 className="text-lg font-semibold">Result</h2>
             {responseJson && (
               <Button
                 variant="ghost"
@@ -157,7 +174,7 @@ export default function HomePage() {
             </span>
           )}
         </div>
-        {isLoading && <p>Generating store...</p>}
+        {isLoading && <p>Generating store... <Timer /></p>}
         {responseJson ? (
           <div className="flex-grow overflow-auto mb-4"> {/* Allow syntax highlighter to scroll, add margin bottom */}
             <SyntaxHighlighter

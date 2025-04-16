@@ -1,13 +1,14 @@
 import { NextResponse } from 'next/server'
 import { generateText } from 'ai';
 import { openai } from '@ai-sdk/openai';
-import fs from 'fs';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 
 
 export async function POST(req: Request) {
   try {
     // main prompt that generates the complete store JSON representation
-    const prototypePrompt = fs.readFileSync('app/api/generate/gen-store-json-prompt.md', 'utf8');
+    const prototypePrompt = await fs.readFile(path.join(process.cwd(), "app/api/generate/gen-store-json-prompt.md"), "utf-8")
     console.log('Loaded `gen-store-json-prompt.md`')
     console.log('prototypePrompt', prototypePrompt)
 
@@ -48,7 +49,9 @@ export async function POST(req: Request) {
     // Parse the AI's response as JSON
     let generatedJson;
     try {
-      generatedJson = JSON.parse(text);
+      // remove markdownesque formatting
+      // remove leading ```json and trailing ```
+      generatedJson = JSON.parse(text.trim().replaceAll(/^```json/g,'').replaceAll(/```$/g,'').trim());
     } catch (parseError) {
       console.error('JSON Parsing Error:', parseError);
       console.error('Raw AI Response:', text); // Log the raw text for debugging
