@@ -117,15 +117,19 @@ export const ChatInner = ({ user }: { user: User }) => {
         />
         <div className="flex space-x-2">
           {/* Example Buttons */}
-          <Button
+          <Button variant="outline" onClick={() => setPrompt('Minimalist shoes designed for everyday comfort, style, and motion.')} disabled={isLoading}>
+            Minimalist Shoes Store Example
+          </Button>
+          {/* <Button
             variant="outline"
             onClick={() =>
               setPrompt('A modern fashion store with minimalist design.')
             }
             disabled={isLoading}
-          >
+          > 
             Fashion Store Example
           </Button>
+          */}
           <Button
             variant="outline"
             onClick={() =>
