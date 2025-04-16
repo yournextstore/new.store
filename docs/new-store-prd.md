@@ -233,16 +233,17 @@ The PoC will be delivered in four phases over 10 days:
 - [x] Build the two-column UI (prompt input with examples on the left, iframe preview on the right).
 - [x] Add predefined example buttons (e.g., "Fashion Store").
 - [ ] Implement basic form validation and error handling.
-- [ ] Refine AI prompt to generate **image placeholder URLs** (as defined in Sec 4.2.1) for necessary sections.
+- [x] Refine AI prompt to generate **image placeholder URLs** (as defined in Sec 4.2.1) for **product images** (`products[].imageUrl`).
 
 ### Phase 3: Backend Image Selection and API Integration (Days 6-7)
-- [ ] Implement backend logic to parse **image placeholder URLs**, load static embeddings, generate query embeddings using the Vercel AI SDK (`embed`), perform linear vector search using Vercel AI SDK primitives (`cosineSimilarity`), select the best match, and inject final image URLs into the JSON object (as defined in Sec 4.2.1). Implement basic fallback logic.
+- [x] Implement backend logic to parse **image placeholder URLs**, load static embeddings, generate query embeddings using the Vercel AI SDK (`embed`), perform linear vector search using Vercel AI SDK primitives (`cosineSimilarity`), select the best match, and inject final image URLs into the JSON object (as defined in Sec 4.2.1). Implement basic fallback logic.
 - [ ] Integrate with YourNextStore's API to send the finalized JSON and retrieve the store domain.
 
 ### Phase 4: Testing and Refinement (Days 8-10)
 - [ ] Test end-to-end flow with various inputs (broad and specific).
 - [ ] Refine the AI prompt based on output quality.
 - [ ] Ensure the preview loads correctly and the store is functional.
+- [ ] Refine AI prompt to generate **image placeholder URLs** (as defined in Sec 4.2.1) for **logo, ogimage, and section images** (e.g., HeroSection, FeatureSection).
 
 **Rationale:**  
 - Phased development prioritizes critical components (AI and infrastructure), and getting end-to-end flow working early, allowing iterative refinement later.

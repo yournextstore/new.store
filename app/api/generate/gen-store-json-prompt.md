@@ -217,7 +217,7 @@ Below are the section types supported by the YourNextStore platform, along with 
   - `"storeName"`: The name of the store (optional; defaults to null).
   - `"storeDescription"`: A brief store description (optional; defaults to null).
   - `"freeShippingThreshold"`: Minimum order amount for free shipping (optional; defaults to null).
-  - `"fontFamily"`: Font for the store’s typography (optional; defaults to null).
+  - `"fontFamily"`: Font for the store's typography (optional; defaults to null).
   - `"logo"`: Store logo as an object with image URL and dimensions, a string URL, or null.
   - `"ogimage"`: Image URL for social sharing (optional; defaults to null).
   - `"colors"`: Global color palette in OKLCH format (e.g., "50% 0.15 210").
@@ -241,17 +241,17 @@ Below are the section types supported by the YourNextStore platform, along with 
   }> | null
   ```
 - **Fields**:
-  - `"name"`: The product’s name (required).
+  - `"name"`: The product's name (required).
   - `"summary"`: A brief description or subtitle for the product (required).
-  - `"price"`: The product’s price (required).
-  - `"imageUrl"`: A URI for the product’s image (optional; must be a valid URI if provided).
+  - `"price"`: The product's price (required).
+  - `"imageUrl"`: A URI for the product's image (optional; must be a valid URI if provided).
 - **Notes**: No additional properties are allowed per product object.
 
 ### Notes on Themes and Colors
 
 - **Global Color Palette in "settings"**:
   - Colors within `"settings" > "colors" > "palette"` use OKLCH format (e.g., "50% 0.15 210").
-  - Defines the store’s overall color scheme.
+  - Defines the store's overall color scheme.
 - **Section-Specific Themes in "paths"**:
   - Colors within section `"theme"` objects use hex format (e.g., "#ffffff").
   - Use sparingly to complement the global palette.
@@ -297,7 +297,7 @@ Below are the section types supported by the YourNextStore platform, along with 
   - `"fontFamily"`: One of `"default"`, `"roboto"`, `"inter"`, `"merriweather"`, `"montserrat"`, `"nunito"`, or null.
   - `"freeShippingThreshold"`: A number or null.
 - **Generated Values**:
-  - `"colors"`: Generate a `"palette"` object based on the user’s store description. Include `"theme"`, `"theme-primary"`, and `"theme-button"`, each with OKLCH color values reflecting the store’s theme (e.g., modern, vintage). If no preference is specified, use a neutral palette.
+  - `"colors"`: Generate a `"palette"` object based on the user's store description. Include `"theme"`, `"theme-primary"`, and `"theme-button"`, each with OKLCH color values reflecting the store's theme (e.g., modern, vintage). If no preference is specified, use a neutral palette.
     - **Example**:
       ```json
       {
@@ -310,14 +310,14 @@ Below are the section types supported by the YourNextStore platform, along with 
         }
       }
       ```
-  - `"storeName"`: Extract from the user’s prompt; default to "Your Store" if not specified.
+  - `"storeName"`: Extract from the user's prompt; default to "Your Store" if not specified.
   - `"storeDescription"`: Generate a brief description from the prompt; default to "" if not provided.
   - `"fontFamily"`: Set based on user preference or default to `"merriweather"`.
 - **Hardcoded Values**:
   - Use hardcoded values for `"logo"` and `"ogimage"` as specified:
     - `"logo"`: { "width": 5049, "height": 3557, "imageUrl": "https://jtit1h3gvnocbut8.public.blob.vercel-storage.com/images/019426bf-cd97-72b8-8c5a-0b3bfc9b361e/test/pexels-bocman-33930-VTEooBiy8xhenQ0Z59NtiT9CeKN7HF.jpg" }
     - `"ogimage"`: "https://jtit1h3gvnocbut8.public.blob.vercel-storage.com/images/019426bf-cd97-72b8-8c5a-0b3bfc9b361e/test/pexels-pixabay-279906-jfAMlw95x6DF81jYo250YQDlLuVShJ.jpg"
-  - If the user doesn’t specify navigation, include links to "/", "/products", and mentioned collections.
+  - If the user doesn't specify navigation, include links to "/", "/products", and mentioned collections.
   - For `ProductGrid`, set `"first": 12` by default.
 
 #### 4. Defaults and Assumptions
@@ -362,62 +362,31 @@ Below are the section types supported by the YourNextStore platform, along with 
 #### 6. Handling "products"
 
 - Generate product details aligned with the user's natural language prompt.
-- Each product must have "name", "summary", and "price". For product images, use the "imageUrl" field and pick images from the "library" of images provided below.
+- Each product object in the array must have `"name"` (string), `"summary"` (string), and `"price"` (number).
+- For product images, use the `"imageUrl"` field and generate a placeholder URL as described in the "Generating Product Image Placeholder URLs" section below. Do **not** use direct image URLs here.
 - Always generate product data creatively if not explicitly provided, based on the store's theme.
-- Generate 4-12 products. ALWAYS.
+- Generate between 4 and 12 products consistently.
 
-#### 7. Image Library
+#### 7. Generating Product Image Placeholder URLs
 
-The following is a library of images that can be used for product images in the format:
+For the `"imageUrl"` field within each object in the `"products"` array, you **must** generate a special placeholder URL. This placeholder tells the backend system what kind of image is desired, allowing it to select an appropriate one from a library later.
 
-```json
-{
-  "imageUrl": "https://fpvnqhp6jqce9ax6.public.blob.vercel-storage.com/images/019610fa-22f5-7637-bb96-aae581db5744/test/image-rcnmRcA1JDoTyqrWeT9zegZLPQR9qX.png",
-  "shortName": "Natural beige sneaker",
-  "alt": "Minimalist beige sneaker with a textured fabric upper, black laces, and a clean white sole, photographed on a light neutral background for an online store display."
-}
-```
+**Format:**
+The placeholder URL **must** follow this exact format:
+`https://yns.img?description=<URL-encoded description>`
 
-The library:
+**Description Generation:**
+The `<description>` part should be a **detailed**, objective description (ideally 2-3 sentences) of the desired product image.
+Base the description on the product's `name`, `summary`, and the overall theme/style of the store.
+Focus on key visual elements, style, product category, colors, and materials that would help find a matching image (similar to how the image library descriptions are structured). Aim for clarity and specificity.
+Example: For a product named "Navy Blue Modern Sneaker", a good description might be: `"A sleek, minimalist low-top sneaker in deep blue with a smooth texture, featuring black laces and eyelets and a clean white sole, offering a modern versatile look."` (Notice the detail regarding texture, specific features, and overall aesthetic).
 
-```json
-{
-  "images": [
-    {
-      "imageUrl": "https://fpvnqhp6jqce9ax6.public.blob.vercel-storage.com/images/019610fa-22f5-7637-bb96-aae581db5744/test/image-rcnmRcA1JDoTyqrWeT9zegZLPQR9qX.png",
-      "shortName": "Natural beige sneaker",
-      "alt": "Minimalist beige sneaker with a textured fabric upper, black laces, and a clean white sole, photographed on a light neutral background for an online store display."
-    },
-    {
-      "imageUrl": "https://fpvnqhp6jqce9ax6.public.blob.vercel-storage.com/images/019610fa-22f5-7637-bb96-aae581db5744/test/image-qbZkaBag6P1VyXpBsgXetjiRiJRqe7.png",
-      "shortName": "Lavender Casual Sneaker",
-      "alt": "A minimalist low-top sneaker in soft lavender with a white sole and black eyelets, perfect for a subtle yet stylish look."
-    },
-    {
-      "imageUrl": "https://fpvnqhp6jqce9ax6.public.blob.vercel-storage.com/images/019610fa-22f5-7637-bb96-aae581db5744/test/image-mH7DdOrR1rceRbBTfZXrUMVzrnDDpq.png",
-      "shortName": "Mustard Yellow Everyday Sneaker",
-      "alt": "A vibrant mustard yellow sneaker with black laces and a white sole, designed for bold and energetic outfits."
-    },
-    {
-      "imageUrl": "https://fpvnqhp6jqce9ax6.public.blob.vercel-storage.com/images/019610fa-22f5-7637-bb96-aae581db5744/test/image-mH7DdOrR1rceRbBTfZXrUMVzrnDDpq.png",
-      "shortName": "Light Gray Urban Sneaker",
-      "alt": "A sleek light gray urban sneaker with matching laces and white sole, offering a clean and versatile style for everyday wear."
-    },
-    {
-      "imageUrl": "https://fpvnqhp6jqce9ax6.public.blob.vercel-storage.com/images/019610fa-22f5-7637-bb96-aae581db5744/test/image-CX8Ea6LapzoRsdKhI6h6h7vNwb3hH6.png",
-      "shortName": "Navy Blue Modern Sneaker",
-      "alt": "A deep navy sneaker with black accents and a white sole, balancing classic and contemporary aesthetics."
-    },
-    {
-      "imageUrl": "https://fpvnqhp6jqce9ax6.public.blob.vercel-storage.com/images/019610fa-22f5-7637-bb96-aae581db5744/test/image-saLKXICaYWchH844KPnPuZArnEG2wc.png",
-      "shortName": "Black and White Classic Sneaker",
-      "alt": "A timeless black sneaker with tonal laces and a crisp white sole, ideal for a modern, understated wardrobe"
-    },
-  ]
-}
-```
+**URL Encoding:**
+The generated description **must** be URL-encoded before being included in the placeholder URL.
+This means replacing spaces with `%20`, and encoding other special characters (e.g., `&` becomes `%26`, `?` becomes `%3F`). Most programming environments have standard functions for this. Ensure your output description is properly encoded.
+Example (Encoded): `https://yns.img?description=A%20sleek%2C%20minimalist%20low-top%20sneaker%20in%20deep%20blue%20with%20a%20smooth%20texture%2C%20featuring%20black%20laces%20and%20eyelets%20and%20a%20clean%20white%20sole%2C%20offering%20a%20modern%20versatile%20look.`
 
-Even if the store has completely different products, use the above library for product images, matching the best you can. The library will get expanded which will make matching easier over time.
+**IMPORTANT**: Only use this placeholder format for the `products[].imageUrl` field. Other image fields (like `settings.logo`, `settings.ogimage`, `HeroSection.data.image.src`) should continue using the hardcoded or default URLs as specified in their respective sections for now.
 
 ---
 

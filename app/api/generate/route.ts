@@ -1,12 +1,136 @@
 import { NextResponse } from 'next/server'
-import { generateText } from 'ai';
+import { generateText, cosineSimilarity, embed } from 'ai';
 import { openai } from '@ai-sdk/openai';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
+// --- Constants & Types ---
+const IMAGE_LIBRARY_PATH = path.join(process.cwd(), 'data', 'lib', 'image-library.json');
+const EMBEDDING_MODEL = openai.embedding('text-embedding-3-small');
+const SIMILARITY_THRESHOLD = 0.45; // Adjust as needed
+const FALLBACK_IMAGE_URL = 'https://via.placeholder.com/300'; // Use a generic placeholder URL if no match found
+
+interface LibraryImageData {
+  path: string;
+  url: string; // Vercel Blob URL
+  description: string;
+  shortName: string;
+  embedding: number[];
+}
+
+// --- Load Image Library Data (Load once, reuse if possible in server context) ---
+let imageLibrary: LibraryImageData[] = [];
+async function loadImageLibrary() {
+  if (imageLibrary.length === 0) {
+    try {
+      console.log(`Loading image library from: ${IMAGE_LIBRARY_PATH}`);
+      const fileContent = await fs.readFile(IMAGE_LIBRARY_PATH, 'utf-8');
+      imageLibrary = JSON.parse(fileContent);
+      console.log(`Loaded ${imageLibrary.length} images into library.`);
+    } catch (error) {
+      console.error('Failed to load image library:', error);
+      // Decide how to handle this - throw error, or continue without image replacement?
+      // For now, we'll log and potentially continue, resulting in placeholders being sent.
+      imageLibrary = []; // Ensure it's empty on failure
+    }
+  }
+  return imageLibrary;
+}
+
+// --- Image Placeholder Replacement Logic ---
+async function replaceImagePlaceholders(json: any): Promise<any> {
+  const library = await loadImageLibrary();
+  let totalPlaceholders = 0;
+  let successfulMatches = 0;
+
+  if (!library || library.length === 0) {
+    console.warn('Image library not loaded or empty. Skipping image replacement.');
+    return json; // Return original JSON if library isn't available
+  }
+
+  if (!json || typeof json !== 'object') return json; // Basic type check
+
+  // Process product images
+  if (Array.isArray(json.products)) {
+    totalPlaceholders = json.products.filter((p: any) => p && typeof p.imageUrl === 'string' && p.imageUrl.startsWith('https://yns.img?description=')).length;
+
+    for (const product of json.products) {
+      if (product && typeof product.imageUrl === 'string' && product.imageUrl.startsWith('https://yns.img?description=')) {
+        try {
+          const url = new URL(product.imageUrl);
+          const description = url.searchParams.get('description');
+
+          if (description) {
+            // 1. Generate embedding for the AI's description
+            const { embedding } = await embed({ model: EMBEDDING_MODEL, value: description });
+
+            // 2. Find best match in the library
+            let bestMatchUrl = FALLBACK_IMAGE_URL;
+            let highestSimilarity = -1;
+            let bestMatchItem: LibraryImageData | null = null;
+
+            for (const item of library) {
+              // Ensure the library item has a valid embedding
+              if (item.embedding && Array.isArray(item.embedding) && item.embedding.length > 0) {
+                const similarity = cosineSimilarity(embedding, item.embedding);
+                if (similarity > highestSimilarity) {
+                  highestSimilarity = similarity;
+                  if (similarity >= SIMILARITY_THRESHOLD) {
+                    bestMatchUrl = item.url; // Store URL of the best match above threshold
+                    bestMatchItem = item; // Store the best matching item itself
+                  }
+                }
+              } else {
+                 console.warn(`Skipping library item due to invalid embedding: ${item.url}`);
+               }
+            }
+
+            if (bestMatchItem && bestMatchUrl !== FALLBACK_IMAGE_URL) {
+              // Log details including both descriptions
+              successfulMatches++; // Increment successful match count
+              console.log(
+                `Image Match Found (Similarity: ${highestSimilarity.toFixed(4)})\n` +
+                `  - Product: "${product.name || 'Unknown Product'}"\n` +
+                `  - Placeholder Desc: "${description}"\n` +
+                `  - Library Desc: "${bestMatchItem.description}"\n` +
+                `  - Result URL: ${bestMatchUrl}`
+              );
+            } else {
+               console.warn(`No suitable image match found (Highest Similarity: ${highestSimilarity.toFixed(4)}) for description: "${description}". Using fallback.`);
+            }
+            product.imageUrl = bestMatchUrl;
+
+          } else {
+            console.warn('Placeholder URL missing description:', product.imageUrl);
+            product.imageUrl = FALLBACK_IMAGE_URL; // Fallback if description is missing
+          }
+        } catch (error) {
+          console.error('Error processing image placeholder:', error);
+          product.imageUrl = FALLBACK_IMAGE_URL; // Fallback on error
+        }
+      }
+    }
+  }
+
+  // TODO: Add logic here to replace placeholders in other locations
+  // (logo, ogimage, sections) when that task is implemented.
+
+  // Log statistics
+  if (totalPlaceholders > 0) {
+    const successRate = ((successfulMatches / totalPlaceholders) * 100).toFixed(2);
+    console.log(`Image Placeholder Stats: Processed=${totalPlaceholders}, Matched=${successfulMatches}, Success Rate=${successRate}%`);
+  } else {
+    console.log('Image Placeholder Stats: No product image placeholders found to process.');
+  }
+
+  return json;
+}
 
 export async function POST(req: Request) {
   try {
+    // Ensure library is loaded on first request (or potentially earlier in a server context)
+    await loadImageLibrary();
+
     // main prompt that generates the complete store JSON representation
     const prototypePrompt = await fs.readFile(path.join(process.cwd(), "app/api/generate/gen-store-json-prompt.md"), "utf-8")
     console.log('Loaded `gen-store-json-prompt.md`')
@@ -58,6 +182,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Failed to parse AI response as JSON', details: (parseError as Error).message, rawResponse: text }, { status: 500 });
     }
 
+    // --- Replace Image Placeholders ---
+    console.log('Replacing image placeholders...');
+    const startTimeReplace = Date.now();
+    const finalJson = await replaceImagePlaceholders(generatedJson);
+    const endTimeReplace = Date.now();
+    console.log(`Image replacement took ${endTimeReplace - startTimeReplace}ms`);
+    // --- End Image Placeholder Replacement ---
+
     // --- Call YNS API ---
     const ynsApiUrl = `https://yns.cx/admin/ai-test/import?userId=${userId}`;
     console.log(`Calling YNS API: ${ynsApiUrl}`);
@@ -68,7 +200,7 @@ export async function POST(req: Request) {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(generatedJson), // Send the AI-generated JSON
+        body: JSON.stringify(finalJson), // Send the JSON with replaced image URLs
       });
 
       if (!ynsResponse.ok) {
@@ -85,8 +217,13 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: 'YNS API did not return a store URL', details: ynsResult }, { status: 500 });
       }
 
-      // Return the YNS store URL, the original JSON, and the generation time
-      return NextResponse.json({ storeUrl: ynsResult.url, storeJson: generatedJson, generationTimeMs });
+      // Return the YNS store URL, the *final* JSON (with replaced images), and generation times
+      return NextResponse.json({
+        storeUrl: ynsResult.url,
+        storeJson: finalJson, // Return the modified JSON
+        generationTimeMs,
+        imageReplacementTimeMs: endTimeReplace - startTimeReplace
+      });
 
     } catch (ynsApiError) {
       console.error('Error calling YNS API:', ynsApiError);
