@@ -2,6 +2,7 @@
 
 import { Button } from '@/components/ui/button';
 import { RadioGroup } from '@/components/ui/radio-group';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@radix-ui/react-label';
 import { RadioGroupItem } from '@radix-ui/react-radio-group';
 import type { User } from 'better-auth';
@@ -33,6 +34,7 @@ const availableUsers = [
 ];
 
 export const ChatInner = ({ user }: { user: User }) => {
+  const [activeTab, setActiveTab] = useState('json');
   const [prompt, setPrompt] = useState('');
   // State for JSON response
   const [responseJson, setResponseJson] = useState<object | null>(null);
@@ -95,9 +97,9 @@ export const ChatInner = ({ user }: { user: User }) => {
   };
 
   return (
-    <div className="grid grid-cols-2 gap-4 h-screen p-4">
+    <div className="grid grid-cols-5 gap-4 h-screen px-4">
       {/* Left Column: Input Form */}
-      <div className="flex flex-col space-y-4">
+      <div className="flex flex-col space-y-4 col-span-2">
         <h1 className="text-2xl font-bold">Generate Your Store</h1>
 
         <p className="font-semibold">
@@ -115,7 +117,7 @@ export const ChatInner = ({ user }: { user: User }) => {
           onChange={(e) => setPrompt(e.target.value)}
           disabled={isLoading}
         />
-        <div className="flex space-x-2">
+        <div className="flex gap-2 flex-wrap">
           {/* Example Buttons */}
           <Button variant="outline" onClick={() => setPrompt('Minimalist shoes designed for everyday comfort, style, and motion.')} disabled={isLoading}>
             Minimalist Shoes Store Example
@@ -159,87 +161,95 @@ export const ChatInner = ({ user }: { user: User }) => {
       </div>
 
       {/* Right Column: Preview Area */}
-      <div className="border rounded-md bg-gray-50 p-4 overflow-auto flex flex-col">
+      <div className="col-span-3 min-h-full flex flex-col">
         <div className="flex justify-between items-center mb-2">
-          <div className="flex items-center space-x-2">
-            <h2 className="text-lg font-semibold">Result</h2>
-            {responseJson && (
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={handleCopy}
-                className="h-6 w-6" // Adjust size as needed
-                aria-label="Copy JSON response"
-              >
-                {isCopied ? (
-                  <CheckIcon className="h-4 w-4 text-green-500" />
-                ) : (
-                  <ClipboardIcon className="h-4 w-4" />
-                )}
-              </Button>
-            )}
-            {isCopied && (
-              <span className="text-xs text-green-600">Copied!</span>
-            )}
-          </div>
           {generationTime !== null && (
             <span className="text-sm text-gray-600">
               Generated in {(generationTime / 1000).toFixed(2)}s
             </span>
           )}
         </div>
-        {isLoading && (
-          <p>
-            Generating store... <Timer />
-          </p>
-        )}
-        {responseJson ? (
-          <div className="grow overflow-auto mb-4">
-            {' '}
-            {/* Allow syntax highlighter to scroll, add margin bottom */}
-            <SyntaxHighlighter
-              language="json"
-              style={okaidia}
-              customStyle={{ margin: 0, flexGrow: 1 }}
-              wrapLongLines={true}
-            >
-              {JSON.stringify(responseJson, null, 2)}
-            </SyntaxHighlighter>
+        <Tabs
+          defaultValue="json"
+          value={activeTab}
+          onValueChange={setActiveTab}
+          className="w-full flex flex-1 flex-col"
+        >
+          <div className="border-b px-4">
+            <TabsList className="h-10 bg-transparent">
+              <TabsTrigger
+                value="json"
+                className="data-[state=active]:bg-white rounded-t-md rounded-b-none"
+              >
+                JSON
+              </TabsTrigger>
+              <TabsTrigger
+                value="preview"
+                className="data-[state=active]:bg-white rounded-t-md rounded-b-none"
+              >
+                Preview
+              </TabsTrigger>
+            </TabsList>
           </div>
-        ) : (
-          !isLoading &&
-          !error && (
-            <p className="text-gray-500">API response will appear here...</p>
-          )
-        )}
+          <div className="border rounded-md bg-gray-50 p-4 overflow-auto flex flex-col flex-1">
+            {isLoading && (
+              <p>
+                Generating store... <Timer />
+              </p>
+            )}
 
-        {/* Display Store URL Link Below JSON */}
-        {storeUrl && !isLoading && (
-          <div className="mt-auto pt-4 border-t">
-            {' '}
-            {/* Position at bottom, add top border */}
-            <p className="font-semibold text-sm mb-1">Store Created:</p>
-            <a
-              href={storeUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-blue-600 hover:underline break-all"
+            <TabsContent
+              value="json"
+              className="p-4 bg-white min-h-full focus-visible:outline-none flex-1"
             >
-              {storeUrl}
-            </a>
-            <p className="mt-2 text-sm text-gray-600">
-              (Store preview iframe will be added here later)
-            </p>
-          </div>
-        )}
+              {responseJson ? (
+                <div className="grow overflow-auto mb-4">
+                  {' '}
+                  {/* Allow syntax highlighter to scroll, add margin bottom */}
+                  <SyntaxHighlighter
+                    language="json"
+                    style={okaidia}
+                    customStyle={{ margin: 0, flexGrow: 1 }}
+                    wrapLongLines={true}
+                  >
+                    {JSON.stringify(responseJson, null, 2)}
+                  </SyntaxHighlighter>
+                </div>
+              ) : (
+                !isLoading &&
+                !error && (
+                  <p className="text-gray-500">
+                    API response will appear here...
+                  </p>
+                )
+              )}
+            </TabsContent>
 
-        {/* Keep iframe placeholder comment for future reference */}
-        {/* Placeholder for iframe preview later
-        <iframe
-          src=\"about:blank\"
-          title=\"Store Preview\"
-          className=\"w-full h-full border-0\"
-        /> */}
+            {/* Display Store URL Link Below JSON */}
+            <TabsContent
+              value="preview"
+              className="bg-white flex min-h-full focus-visible:outline-none"
+            >
+              {storeUrl && (
+                <div className="pt-4 border-t flex-1">
+                  <a
+                    href={storeUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 hover:underline break-all"
+                  >
+                    {storeUrl}
+                  </a>
+                  <iframe
+                    src="https://esu-honowa.yns.cx/"
+                    title="Store Preview"
+                    className="w-full flex-1 h-full border-0"
+                  />
+                </div>
+              )}
+            </TabsContent>
+          </div>
+        </Tabs>
       </div>
     </div>
   );

@@ -2,15 +2,10 @@ import type {
   CoreAssistantMessage,
   CoreToolMessage,
   Message,
-  TextStreamPart,
-  ToolInvocation,
-  ToolSet,
   UIMessage,
 } from 'ai';
 import { type ClassValue, clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-
-import type { DBMessage, Document } from '@/lib/db/schema';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -142,16 +137,6 @@ export function getMostRecentUserMessage(messages: Array<UIMessage>) {
   return userMessages.at(-1);
 }
 
-export function getDocumentTimestampByIndex(
-  documents: Array<Document>,
-  index: number,
-) {
-  if (!documents) return new Date();
-  if (index > documents.length) return new Date();
-
-  return documents[index].createdAt;
-}
-
 export function getTrailingMessageId({
   messages,
 }: {
@@ -165,16 +150,16 @@ export function getTrailingMessageId({
 }
 
 export function invariant(
-	condition: unknown,
-	message: string,
-	ErrorClass?: {
-		new (message: string): unknown;
-	},
+  condition: unknown,
+  message: string,
+  ErrorClass?: {
+    new (message: string): unknown;
+  },
 ): asserts condition {
-	if (!condition) {
-		if (ErrorClass) {
-			throw new ErrorClass(message);
-		}
-		throw new Error(message);
-	}
+  if (!condition) {
+    if (ErrorClass) {
+      throw new ErrorClass(message);
+    }
+    throw new Error(message);
+  }
 }
