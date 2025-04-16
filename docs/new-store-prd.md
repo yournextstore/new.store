@@ -222,7 +222,7 @@ The PoC will be delivered in four phases over 10 days:
 - [x] Integrate AI SDK and GPT-4o for JSON generation (initially without image placeholder urls).
 - [x] Implement the prototype prompt and test initial JSON structure outputs.
   - [x] Add a simple POST call to YNS API to send the JSON and get a domain name in return.
-- [ ] **Develop Image Library and Embedding Script:** Create the initial image library (~50-100 images) with descriptions in a JSON file. Develop and run the script to pre-compute and store embeddings for these descriptions (`text-embedding-3-small`). Commit image files and JSON data (descriptions, embeddings) to the repository.
+- [x] **Develop Image Library and Embedding Script:** Create the initial image library (~50-100 images) with descriptions in a JSON file. Develop and run the script to pre-compute and store embeddings for these descriptions (`text-embedding-3-small`). Commit image files and JSON data (descriptions, embeddings) to the repository.
   - [x] Download the initial images from the toy image scratchpad and store them in the `./public/images/library/` folder.
   - [x] Create a script to generate textual descriptions for the images and pre-compute and store embeddings for the image descriptions based on image files stored in the Git repo, at `./public/images/library/`.
   - [x] Commit the image files and JSON data (descriptions, embeddings) to the repository.
