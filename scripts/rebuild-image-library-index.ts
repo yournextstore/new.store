@@ -67,24 +67,21 @@ interface ImageData {
 async function findImageFiles(dir: string): Promise<string[]> {
   try {
     const entries = await fs.readdir(dir, { withFileTypes: true });
-    const files = await Promise.all(
-      entries.map(async (entry) => {
-        const fullPath = path.join(dir, entry.name);
-        if (entry.isDirectory()) {
-          // Recursively search subdirectories if needed in the future
-          // For now, we assume a flat structure based on PRD
-          // return findImageFiles(fullPath);
-          return []; // Ignore subdirectories for now
-        } else if (
-          entry.isFile() &&
-          SUPPORTED_EXTENSIONS.includes(path.extname(entry.name).toLowerCase())
-        ) {
-          return [fullPath];
-        }
-        return [];
-      }),
-    );
-    return files.flat();
+    let imageFiles: string[] = [];
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        // Recursively search subdirectories
+        const subDirImages = await findImageFiles(fullPath);
+        imageFiles = imageFiles.concat(subDirImages);
+      } else if (
+        entry.isFile() &&
+        SUPPORTED_EXTENSIONS.includes(path.extname(entry.name).toLowerCase())
+      ) {
+        imageFiles.push(fullPath);
+      }
+    }
+    return imageFiles;
   } catch (error) {
     console.error(`Error reading directory ${dir}:`, error);
     throw error; // Re-throw to stop the script
@@ -154,7 +151,10 @@ async function main() {
       const imageBuffer = await fs.readFile(imagePath);
 
       // --- Vercel Blob Upload (Using allowOverwrite) ---
-      const blobPathname = `library/${filename}`;
+      // Calculate path relative to the base library directory for blob storage path
+      const relativeToLibrary = path.relative(IMAGE_LIBRARY_DIR, imagePath);
+      // Ensure forward slashes for blob path
+      const blobPathname = path.posix.join('library', relativeToLibrary);
 
       // Upload the new version, allowing overwrite.
       const blob = await put(blobPathname, imageBuffer, {
