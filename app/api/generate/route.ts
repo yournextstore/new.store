@@ -57,7 +57,84 @@ async function replaceImagePlaceholders(json: any): Promise<any> {
 
   if (!json || typeof json !== 'object') return json; // Basic type check
 
-  // Process product images
+  // --- Process Hero Section (Phase 3: Hardcoded Quark Images) ---
+  if (json.paths && typeof json.paths === 'object') {
+    for (const pathKey in json.paths) {
+      if (Array.isArray(json.paths[pathKey])) {
+        for (const section of json.paths[pathKey]) {
+          if (section && section.id === 'HeroSection') {
+            // Case 1: Multi-slide structure
+            if (Array.isArray(section.data?.slides)) {
+              console.log(
+                `Processing HeroSection (Multi-slide) in path: ${pathKey}`,
+              );
+              for (const slide of section.data.slides) {
+                if (slide?.image && typeof slide.boxAlignment === 'string') {
+                  const alignment = slide.boxAlignment.toLowerCase();
+                  let heroImageUrl =
+                    'https://ydwmassfcxbi4xdn.public.blob.vercel-storage.com/library/quark-sneaker/quark-hero-left.jpg';
+                  if (alignment === 'right') {
+                    heroImageUrl =
+                      'https://ydwmassfcxbi4xdn.public.blob.vercel-storage.com/library/quark-sneaker/quark-hero-right.jpg';
+                  } else if (alignment !== 'left') {
+                    console.warn(
+                      `HeroSection (Slide): Unexpected boxAlignment "${slide.boxAlignment}". Defaulting to left-aligned image.`,
+                    );
+                  }
+                  console.log(
+                    `  - Slide alignment: "${alignment}", Overriding image.src with: ${heroImageUrl}`,
+                  );
+                  slide.image.src = heroImageUrl;
+                } else {
+                  console.warn(
+                    'HeroSection slide missing image or boxAlignment:',
+                    slide,
+                  );
+                }
+              }
+            }
+            // Case 2: Single-slide structure
+            else if (
+              section.data?.image &&
+              typeof section.data.boxAlignment === 'string'
+            ) {
+              console.log(
+                `Processing HeroSection (Single-slide) in path: ${pathKey}`,
+              );
+              const alignment = section.data.boxAlignment.toLowerCase();
+              let heroImageUrl =
+                'https://ydwmassfcxbi4xdn.public.blob.vercel-storage.com/library/quark-sneaker/quark-hero-left.jpg';
+              if (alignment === 'right') {
+                heroImageUrl =
+                  'https://ydwmassfcxbi4xdn.public.blob.vercel-storage.com/library/quark-sneaker/quark-hero-right.jpg';
+              } else if (alignment !== 'left') {
+                console.warn(
+                  `HeroSection (Single): Unexpected boxAlignment "${section.data.boxAlignment}". Defaulting to left-aligned image.`,
+                );
+              }
+              console.log(
+                `  - Section alignment: "${alignment}", Overriding image.src with: ${heroImageUrl}`,
+              );
+              section.data.image.src = heroImageUrl;
+            }
+            // Optional: Add an else block here to log if neither structure is matched
+            else {
+              console.warn(
+                'HeroSection found, but structure did not match expected single-slide or multi-slide patterns. Image not overridden.',
+                section.data,
+              );
+            }
+          }
+          // --- Placeholder for Phase 4: Process Hero Section Placeholders ---
+          // else if (section && section.id === 'HeroSection' && ...) {
+          //  // Logic to handle description placeholders + alignment filtering
+          // }
+        }
+      }
+    }
+  }
+
+  // --- Process product images (Existing Logic) ---
   if (Array.isArray(json.products)) {
     totalPlaceholders = json.products.filter(
       (p: any) =>

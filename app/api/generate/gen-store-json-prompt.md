@@ -21,7 +21,7 @@ Below are the section types supported by the Your Next Store platform, along wit
         "description": string,
         "button": { "label": string, "path": string },
         "image": { "src": string | null, "alt": string },
-        "boxAlignment": "left" | "right" | "center",
+        "boxAlignment": "left" | "right" | "center", //`center` box alignment is supported by YourNextStore, but out of scope for the AI agent; to be supported in the future.
         "textAlignment": "left" | "right" | "center"
       }
       ```
@@ -34,7 +34,7 @@ Below are the section types supported by the Your Next Store platform, along wit
             "description": string,
             "button": { "label": string, "path": string },
             "image": { "src": string | null, "alt": string },
-            "boxAlignment": "left" | "right" | "center",
+            "boxAlignment": "left" | "right" | "center", //`center` box alignment is supported by YourNextStore, but out of scope for the AI agent; to be supported in the future.
             "textAlignment": "left" | "right" | "center"
           }
         ]
@@ -282,6 +282,8 @@ Below are the section types supported by the Your Next Store platform, along wit
 - **Product Pages ("/product/[slug]")**: Add RelatedProducts or ReviewList if the user mentions them.
 - **Custom Pages**: For pages like "/about", use Title and Markdown with content from the user's description.
 - Generate text (titles, descriptions, button labels) creatively based on the store's theme and user input.
++
++- **HeroSection**: If adding a HeroSection, ensure each slide includes a `boxAlignment` field set to either `"left"` or `"right"`. Choose based on the user's described aesthetic or default appropriately. Use the default image `src` specified in Section 4 for the `image.src` field at this time.
 
 #### 3. Handling "settings"
 - **Supported Values**:
