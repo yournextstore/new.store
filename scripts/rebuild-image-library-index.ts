@@ -7,6 +7,7 @@ import { z } from 'zod';
 import cliProgress from 'cli-progress';
 import Table from 'cli-table3';
 import { put } from '@vercel/blob';
+import pLimit from 'p-limit';
 
 // Load environment variables from .env file
 dotenv.config();
@@ -31,6 +32,7 @@ const EMBEDDING_MODEL = openai.embedding('text-embedding-3-small');
 const DESCRIPTION_MODEL = openai('gpt-4o');
 const API_TIMEOUT_MS = 60000;
 const MAX_RETRIES = 3;
+const CONCURRENCY = 8;
 
 // Check for Vercel Blob token and URL
 if (!process.env.BLOB_READ_WRITE_TOKEN) {
@@ -106,6 +108,65 @@ async function ensureDirectoryExists(filePath: string): Promise<void> {
     }
 }
 
+// --- New function to process a single image ---
+async function processImage(imagePath: string, progressBar: cliProgress.SingleBar): Promise<ImageData> {
+    const filename = path.basename(imagePath);
+    progressBar.update({ filename }); // Update filename immediately
+
+    try {
+        // Read image file
+        const imageBuffer = await fs.readFile(imagePath);
+
+        // --- Vercel Blob Upload (Using allowOverwrite) ---
+        const relativeToLibrary = path.relative(IMAGE_LIBRARY_DIR, imagePath);
+        const blobPathname = path.posix.join('library', relativeToLibrary);
+        const blob = await put(blobPathname, imageBuffer, {
+            access: 'public',
+            allowOverwrite: true,
+        });
+        const blobUrl = blob.url;
+        // --- End Vercel Blob Upload ---
+
+        // Generate structured description and shortName
+        const { object: generatedData } = await generateObject({
+            model: DESCRIPTION_MODEL,
+            schema: descriptionSchema,
+            messages: [
+                { role: 'user', content: [{ type: 'image', image: imageBuffer }, { type: 'text', text: DESCRIPTION_PROMPT }] }
+            ],
+            maxRetries: MAX_RETRIES,
+            abortSignal: AbortSignal.timeout(API_TIMEOUT_MS),
+        });
+
+        if (!generatedData || !generatedData.description || !generatedData.shortName) {
+            throw new Error('Failed to generate complete structured data (description/shortName).');
+        }
+
+        // Generate embedding for the detailed description
+        const { embedding } = await embed({
+            model: EMBEDDING_MODEL,
+            value: generatedData.description,
+            maxRetries: MAX_RETRIES,
+            abortSignal: AbortSignal.timeout(API_TIMEOUT_MS),
+        });
+
+        const relativePath = path.relative(path.join(process.cwd(), 'public'), imagePath);
+        return {
+            path: `/${relativePath}`,
+            url: blobUrl,
+            description: generatedData.description,
+            shortName: generatedData.shortName,
+            embedding,
+        };
+    } catch (error) {
+        // Add imagePath to the error for better tracking in the main loop
+        (error as any).imagePath = imagePath;
+        throw error;
+    } finally {
+         progressBar.increment(); // Increment after processing (success or failure)
+    }
+}
+
 // --- Main Execution ---
 
 async function main() {
@@ -137,69 +198,28 @@ async function main() {
   );
   progressBar.start(imagePaths.length, 0, { filename: 'N/A' });
 
-  // 5. Process Images
+  // 5. Process Images Concurrently
   const results: ImageData[] = [];
   const errors: { path: string; error: any }[] = [];
+  const limit = pLimit(CONCURRENCY); // Create limiter
 
-  for (const imagePath of imagePaths) {
-    const relativePath = path.relative(path.join(process.cwd(), 'public'), imagePath);
-    const filename = path.basename(imagePath);
-    progressBar.update({ filename });
+  const processingPromises = imagePaths.map((imagePath) => {
+    // Wrap the call to processImage with the limiter
+    return limit(() => processImage(imagePath, progressBar));
+  });
 
-    try {
-      // Read image file
-      const imageBuffer = await fs.readFile(imagePath);
+  const settledResults = await Promise.allSettled(processingPromises);
 
-      // --- Vercel Blob Upload (Using allowOverwrite) ---
-      // Calculate path relative to the base library directory for blob storage path
-      const relativeToLibrary = path.relative(IMAGE_LIBRARY_DIR, imagePath);
-      // Ensure forward slashes for blob path
-      const blobPathname = path.posix.join('library', relativeToLibrary);
-
-      // Upload the new version, allowing overwrite.
-      const blob = await put(blobPathname, imageBuffer, {
-        access: 'public',
-        allowOverwrite: true,
-      });
-      const blobUrl = blob.url;
-      // --- End Vercel Blob Upload ---
-
-      // Generate structured description and shortName
-      const { object: generatedData } = await generateObject({
-        model: DESCRIPTION_MODEL,
-        schema: descriptionSchema,
-        messages: [
-          { role: 'user', content: [{ type: 'image', image: imageBuffer }, { type: 'text', text: DESCRIPTION_PROMPT }] }
-        ],
-        maxRetries: MAX_RETRIES,
-        abortSignal: AbortSignal.timeout(API_TIMEOUT_MS),
-      });
-
-      // Validate (redundant with generateObject success, but good practice)
-      if (!generatedData || !generatedData.description || !generatedData.shortName) {
-        throw new Error('Failed to generate complete structured data (description/shortName).');
-      }
-
-      // Generate embedding for the detailed description
-      const { embedding } = await embed({
-        model: EMBEDDING_MODEL,
-        value: generatedData.description,
-        maxRetries: MAX_RETRIES,
-        abortSignal: AbortSignal.timeout(API_TIMEOUT_MS),
-      });
-
-      results.push({
-        path: `/${relativePath}`,
-        url: blobUrl,
-        description: generatedData.description,
-        shortName: generatedData.shortName,
-        embedding,
-      });
-    } catch (error) {
-      errors.push({ path: imagePath, error });
+  // Process results after all promises have settled
+  settledResults.forEach(result => {
+    if (result.status === 'fulfilled') {
+        results.push(result.value);
+    } else {
+        // Extract imagePath from the error if available
+        const imagePath = result.reason?.imagePath || 'Unknown path';
+        errors.push({ path: imagePath, error: result.reason });
     }
-    progressBar.increment();
-  }
+  });
 
   progressBar.stop();
 
@@ -255,4 +275,4 @@ Successfully generated data and uploaded ${results.length} images to Vercel Blob
 main().catch((error) => {
   console.error('\nScript failed:', error);
   process.exit(1);
-}); 
+});
