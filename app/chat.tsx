@@ -184,13 +184,6 @@ export const ChatInner = ({ user }: { user: User }) => {
 
 			{/* Right Column: Preview Area */}
 			<div className="col-span-4 min-h-full flex flex-col py-2">
-				<div className="flex justify-between items-center">
-					{generationTime !== null && (
-						<span className="text-sm text-gray-600">
-							Generated in {(generationTime / 1000).toFixed(2)}s
-						</span>
-					)}
-				</div>
 				<Tabs
 					defaultValue="preview"
 					value={activeTab}
@@ -203,12 +196,17 @@ export const ChatInner = ({ user }: { user: User }) => {
 							<TabsTrigger value="json">JSON Output</TabsTrigger>
 						</TabsList>
 						{isLoading && (
-							<p>
+							<span className="text-sm text-gray-600">
 								Generating store... <Timer />
-							</p>
+							</span>
+						)}
+						{generationTime !== null && (
+							<span className="text-sm text-gray-600">
+								Generated in {(generationTime / 1000).toFixed(2)}s
+							</span>
 						)}
 					</div>
-					<div className="border rounded-md bg-gray-50 p-4 overflow-auto flex flex-col flex-1">
+					<div className="border rounded-md bg-gray-50 overflow-auto flex flex-col flex-1">
 						<TabsContent value="json">
 							{responseJson ? (
 								<div className="grow overflow-auto mb-4">
@@ -241,11 +239,11 @@ export const ChatInner = ({ user }: { user: User }) => {
 										href={storeUrl}
 										target="_blank"
 										rel="noopener noreferrer"
-										className="text-blue-600 px-4 py-1 hover:underline break-all flex"
+										className="text-neutral-600 px-8 py-1 hover:underline break-all flex"
 									>
 										{storeUrl}
 									</a>
-									<div className="border-t flex-1 flex">
+									<div className="border-t flex-1 flex h-full">
 										<iframe
 											src={storeUrl}
 											title="Store Preview"
