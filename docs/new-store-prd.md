@@ -232,12 +232,12 @@ The PoC will be delivered in four phases over 10 days:
 ### Phase 2: UI, User Flow, and Image Placeholder Generation (Days 4-5)
 - [x] Build the two-column UI (prompt input with examples on the left, iframe preview on the right).
 - [x] Add predefined example buttons (e.g., "Fashion Store").
-- [ ] Implement basic form validation and error handling.
+- [x] Implement basic form validation and error handling.
 - [x] Refine AI prompt to generate **image placeholder URLs** (as defined in Sec 4.2.1) for **product images** (`products[].imageUrl`).
 
 ### Phase 3: Backend Image Selection and API Integration (Days 6-7)
 - [x] Implement backend logic to parse **image placeholder URLs**, load static embeddings, generate query embeddings using the Vercel AI SDK (`embed`), perform linear vector search using Vercel AI SDK primitives (`cosineSimilarity`), select the best match, and inject final image URLs into the JSON object (as defined in Sec 4.2.1). Implement basic fallback logic.
-- [ ] Integrate with YourNextStore's API to send the finalized JSON and retrieve the store domain.
+- [x] Integrate with YourNextStore's API to send the finalized JSON and retrieve the store domain.
 
 ### Phase 4: Testing and Refinement (Days 8-10)
 - [ ] Test end-to-end flow with various inputs (broad and specific).
