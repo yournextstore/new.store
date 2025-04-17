@@ -163,6 +163,22 @@ To communicate image requirements from the AI agent to the backend for lookup in
 - **API Call:**  
   - Send JSON to YourNextStore's API and process the response.  
 
+#### 4.2.2 Hero Section Image Selection Strategy
+
+- **Goal:** To dynamically select hero images from the static library whose visual composition complements the chosen text/content layout (`boxAlignment`) specified in the `HeroSection` data. This aims to improve text legibility by placing text over relatively empty areas of the background image.
+- **Mechanism:**
+  - **AI Role:** The AI agent generates the `HeroSection` JSON, setting the `data.boxAlignment` field (initially restricted to `"left"` or `"right"` for the PoC based on theme or defaults) and generating a standard semantic placeholder URL (`https://yns.img?description=...`) for `data.image.src`. The AI prompt will be updated to remove the previous exclusion of `HeroSection` images from this placeholder mechanism and to guide the selection of `boxAlignment`.
+  - **Backend Role:** The backend API route intercepts the JSON. When processing a `HeroSection`, it parses the semantic `description` from the `image.src` placeholder URL and reads the required `boxAlignment` value directly from the `HeroSection.data`.
+  - **Selection Process:** The backend performs a vector similarity search using the extracted `description` against the descriptions of images in the static library. It then filters or prioritizes the semantically relevant matches based on the required `boxAlignment`. This layout matching relies on a filename convention for the hero images stored in the library:
+    - Images suitable for `boxAlignment: "left"` should have filenames ending in `-left.jpg` (or similar extension).
+    - Images suitable for `boxAlignment: "right"` should have filenames ending in `-right.jpg` (or similar extension).
+    - The backend logic will check the filename of candidate images after the semantic search.
+  - **Fallback:** If no image satisfies both the semantic and layout requirements (e.g., no `*-left.jpg` matches the description well enough), the backend should implement a fallback, such as selecting the best semantic match regardless of filename convention or using a predefined default hero image.
+- **Image Library Requirements:**
+  - Hero images added to the library must follow the filename convention (`*-left.jpg`, `*-right.jpg`) to indicate their intended layout suitability.
+- **Alternatives Considered:** An alternative was adding an `&align=` parameter to the placeholder URL itself. Using the existing `boxAlignment` field in the JSON was preferred to avoid redundancy and keep the URL format consistent with product images.
+- **PoC Scope:** The initial implementation focuses on `"left"` and `"right"` alignments using a limited set of foundational hero images (e.g., the Quark examples). Support for `"center"` alignment and a broader semantic range of hero images are deferred post-PoC. Filename convention is used for simplicity; a more robust metadata system could be adopted later.
+
 ### 4.3 Assets
 - **Predefined Themes:**  
   - 3-5 themes (e.g., minimalist, vibrant, classic) with OKLCH color palettes.  
@@ -238,12 +254,17 @@ The PoC will be delivered in four phases over 10 days:
 ### Phase 3: Backend Image Selection and API Integration (Days 6-7)
 - [x] Implement backend logic to parse **image placeholder URLs**, load static embeddings, generate query embeddings using the Vercel AI SDK (`embed`), perform linear vector search using Vercel AI SDK primitives (`cosineSimilarity`), select the best match, and inject final image URLs into the JSON object (as defined in Sec 4.2.1). Implement basic fallback logic.
 - [x] Integrate with YourNextStore's API to send the finalized JSON and retrieve the store domain.
+- [ ] Add initial hero images (e.g., Quark examples) to `./public/images/library/` following the layout filename convention (`*-left.jpg`, `*-right.jpg`) as described in Section 4.2.2.
+- [ ] Refine AI prompt (`app/api/generate/gen-store-json-prompt.md`) to generate `boxAlignment` (left/right only) as detailed in Section 4.2.2, and the backend to always select hero image from the quark example. There won't be any placeholder URLs for the hero image at this stage.
 
 ### Phase 4: Testing and Refinement (Days 8-10)
 - [ ] Test end-to-end flow with various inputs (broad and specific).
 - [ ] Refine the AI prompt based on output quality.
 - [ ] Ensure the preview loads correctly and the store is functional.
-- [ ] Refine AI prompt to generate **image placeholder URLs** (as defined in Sec 4.2.1) for **logo, ogimage, and section images** (e.g., HeroSection, FeatureSection).
+- [ ] Refine AI prompt (`app/api/generate/gen-store-json-prompt.md`) to include `HeroSection.data.image.src` in the placeholder URL mechanism and generate `boxAlignment` (left/right only) as detailed in Section 4.2.2.
+- [ ] Update backend image selection logic to handle `HeroSection` images, using `boxAlignment` from JSON and filename convention (`*-left.jpg`, `*-right.jpg`) for layout filtering, as detailed in Section 4.2.2.
+- [ ] Refine AI prompt to generate **image placeholder URLs** (as defined in Sec 4.2.1) for **logo, ogimage, and section images** (e.g., FeatureSection). *(Note: This task might need adjustment based on HeroSection implementation)*.
+- [ ] Test the Hero Section image selection flow end-to-end, ensuring correct image selection based on description and `boxAlignment`.
 
 **Rationale:**  
 - Phased development prioritizes critical components (AI and infrastructure), and getting end-to-end flow working early, allowing iterative refinement later.
