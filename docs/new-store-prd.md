@@ -254,7 +254,7 @@ The PoC will be delivered in four phases over 10 days:
 ### Phase 3: Backend Image Selection and API Integration (Days 6-7)
 - [x] Implement backend logic to parse **image placeholder URLs**, load static embeddings, generate query embeddings using the Vercel AI SDK (`embed`), perform linear vector search using Vercel AI SDK primitives (`cosineSimilarity`), select the best match, and inject final image URLs into the JSON object (as defined in Sec 4.2.1). Implement basic fallback logic.
 - [x] Integrate with YourNextStore's API to send the finalized JSON and retrieve the store domain.
-- [ ] Add initial hero images (e.g., Quark examples) to `./public/images/library/` following the layout filename convention (`*-left.jpg`, `*-right.jpg`) as described in Section 4.2.2.
+- [x] Add initial hero images (e.g., Quark examples) to `./public/images/library/` following the layout filename convention (`*-left.jpg`, `*-right.jpg`) as described in Section 4.2.2.
 - [ ] Refine AI prompt (`app/api/generate/gen-store-json-prompt.md`) to generate `boxAlignment` (left/right only) as detailed in Section 4.2.2, and the backend to always select hero image from the quark example. There won't be any placeholder URLs for the hero image at this stage.
 
 ### Phase 4: Testing and Refinement (Days 8-10)
