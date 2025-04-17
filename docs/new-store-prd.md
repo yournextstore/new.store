@@ -261,7 +261,7 @@ The PoC will be delivered in four phases over 10 days:
 - [ ] Test end-to-end flow with various inputs (broad and specific).
 - [ ] Refine the AI prompt based on output quality.
   - [x] Make hero text box colors consistent with the assumed white background of the hero images.
-- [ ] Ensure the preview loads correctly and the store is functional.
+- [x] Ensure the preview loads correctly and the store is functional.
 - [ ] Refine AI prompt (`app/api/generate/gen-store-json-prompt.md`) to include `HeroSection.data.image.src` in the placeholder URL mechanism and generate `boxAlignment` (left/right only) as detailed in Section 4.2.2.
 - [ ] Update backend image selection logic to handle `HeroSection` images, using `boxAlignment` from JSON and filename convention (`*-left.jpg`, `*-right.jpg`) for layout filtering, as detailed in Section 4.2.2.
 - [ ] Refine AI prompt to generate **image placeholder URLs** (as defined in Sec 4.2.1) for **logo, ogimage, and section images** (e.g., FeatureSection). *(Note: This task might need adjustment based on HeroSection implementation)*.
