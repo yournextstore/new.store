@@ -99,7 +99,7 @@ export const ChatInner = ({ user }: { user: User }) => {
   return (
     <div className="grid grid-cols-5 gap-4 h-screen px-4">
       {/* Left Column: Input Form */}
-      <div className="flex flex-col space-y-4 col-span-2">
+      <div className="flex flex-col space-y-4 col-span-2 h-full">
         <h1 className="text-2xl font-bold">Generate Your Next Store</h1>
 
         <p className="font-semibold">
@@ -166,6 +166,15 @@ export const ChatInner = ({ user }: { user: User }) => {
         {error && <p className="text-red-500">Error: {error}</p>}
 
         {/* TODO: Add toggle/switch for JSON preview */}
+        <footer className="mt-auto text-xs py-2">
+          <a
+            href={`${process.env.NEXT_PUBLIC_YNS_API_URL}/login`}
+            target="_blank"
+            className="hover:underline"
+          >
+            {process.env.NEXT_PUBLIC_YNS_API_URL}
+          </a>
+        </footer>
       </div>
 
       {/* Right Column: Preview Area */}
