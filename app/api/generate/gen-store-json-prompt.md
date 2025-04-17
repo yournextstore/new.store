@@ -40,12 +40,20 @@ Below are the section types supported by the Your Next Store platform, along wit
         ]
       }
       ```
-  - **"theme"**: Customize with these properties (use hex color format, e.g., "#ffffff"):
-    - `"backgroundColor"`: Background color.
-    - `"color"`: Text color.
+- **"theme"**: Customize with these properties (use hex color format, e.g., "#111827"):
+    - `"backgroundColor"`: Background color for the text box. (**IMPORTANT**: While supported, **do not** include this property in the generated theme for `HeroSection`. The text should render directly on the image.)
+    - `"color"`: Text color. **Choose a color with good contrast** against typical image backgrounds (e.g., a dark gray like `#111827` or `#374151`).
     - `"buttonBackgroundColor"`: Button background color.
     - `"buttonTextColor"`: Button text color.
     - `"buttonHoverBackgroundColor"`: Button background color on hover.
+  - **Example**:
+    ```json
+    {
+      "id": "HeroSection",
+      "data": { "title": "Welcome", "description": "Discover our products", "button": { "label": "Shop Now", "path": "/products" }, "image": { "src": "hero.jpg", "alt": "Hero Image" }, "boxAlignment": "left" },
+      "theme": { "color": "#111827", "buttonBackgroundColor": "#059669", "buttonTextColor": "#ffffff", "buttonHoverBackgroundColor": "#047857" } // Note: no backgroundColor
+    }
+    ```
 
 - **ProductGrid**: A grid or carousel of products.
   - **"data"**: 
