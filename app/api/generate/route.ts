@@ -333,7 +333,7 @@ export async function POST(req: Request) {
     // --- End Image Placeholder Replacement ---
 
     // --- Call YNS API ---
-    const ynsApiUrl = `${process.env.NEXT_PUBLIC_YNS_API_URL}/admin/ai-test/import?userId=${userId}`;
+    const ynsApiUrl = `${process.env.YNS_API_URL}/admin/ai-test/import?userId=${userId}`;
     console.log(`Calling YNS API: ${ynsApiUrl}`);
     const ynsApiKey = process.env.YNS_AI_API_KEY;
 
