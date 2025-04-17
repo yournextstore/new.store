@@ -290,8 +290,10 @@ Below are the section types supported by the Your Next Store platform, along wit
 - **Product Pages ("/product/[slug]")**: Add RelatedProducts or ReviewList if the user mentions them.
 - **Custom Pages**: For pages like "/about", use Title and Markdown with content from the user's description.
 - Generate text (titles, descriptions, button labels) creatively based on the store's theme and user input.
-+
-+- **HeroSection**: If adding a HeroSection, ensure each slide includes a `boxAlignment` field set to either `"left"` or `"right"`. Choose based on the user's described aesthetic or default appropriately. Use the default image `src` specified in Section 4 for the `image.src` field at this time.
+- **HeroSection**: If adding a HeroSection, ensure each slide includes:
+  - A `boxAlignment` field set to either `"left"` or `"right"`. Choose based on the user's described aesthetic or default appropriately.
+  - An `image.src` field generated using the placeholder URL format specified in Section 8 below.
+  - An appropriate `image.alt` description.
 
 #### 3. Handling "settings"
 - **Supported Values**:
@@ -335,7 +337,6 @@ Below are the section types supported by the Your Next Store platform, along wit
   - Navigation: Include links to "/", "/products", and any mentioned collections.
   - Footer: Include a section with the store name and "credits": true.
   - ProductGrid: Set "first": 12.
-- For images (e.g., HeroSection), use "src": "https://stripe-camo.global.ssl.fastly.net/cd09e4877d3e3e8aa26b05d8778f75f8a814c1660e0de4fe443c76ca2ee07aae/68747470733a2f2f66696c65732e7374726970652e636f6d2f6c696e6b732f4d44423859574e6a644638785433426165473547536d4e57625668366255527366475a735833526c633352666258425856477445515538784e6a68355a575257574852336155396d526a526f3030336e67523942526a".
 
 #### 5. Handling Themes and Colors
 - **Global Color Palette in "settings"**:
@@ -396,7 +397,21 @@ The generated description **must** be URL-encoded before being included in the p
 This means replacing spaces with `%20`, and encoding other special characters (e.g., `&` becomes `%26`, `?` becomes `%3F`). Most programming environments have standard functions for this. Ensure your output description is properly encoded.
 Example (Encoded): `https://yns.img?description=A%20sleek%2C%20minimalist%20low-top%20sneaker%20in%20deep%20blue%20with%20a%20smooth%20texture%2C%20featuring%20black%20laces%20and%20eyelets%20and%20a%20clean%20white%20sole%2C%20offering%20a%20modern%20versatile%20look.`
 
-**IMPORTANT**: Only use this placeholder format for the `products[].imageUrl` field. Other image fields (like `settings.logo`, `settings.ogimage`, `HeroSection.data.image.src`) should continue using the hardcoded or default URLs as specified in their respective sections for now.
+**IMPORTANT**: Only use this placeholder format for the `products[].imageUrl` and `HeroSection.data.image.src` (or `HeroSection.data.slides[].image.src`) fields. Other image fields (like `settings.logo`, `settings.ogimage`) should continue using the hardcoded URLs as specified in their respective sections for now.
+
+#### 8. Generating Hero Section Image Placeholder URLs
+
+For the `image.src` field within the `HeroSection` data (either directly in `data.image.src` or within each `data.slides[].image.src`), you **must** generate a special placeholder URL using the same format as product images:
+
+**Format:**
+`https://yns.img?description=<URL-encoded description>`
+
+**Description Generation:**
+The `<description>` part should be a **detailed**, objective description (ideally 2-3 sentences) of the desired hero image.
+Base the description on the overall theme, style, and potentially the products or feeling described in the user's prompt. Focus on visual elements, mood, composition, and colors that represent the store's brand (e.g., "A bright, airy studio setting with natural wood elements displaying minimalist ceramic vases", "A dramatic, high-contrast shot of a sleek black electronic gadget on a dark textured surface"). Aim for descriptions that capture the essence of a potential hero image.
+
+**URL Encoding:**
+The generated description **must** be URL-encoded before being included in the placeholder URL.
 
 ---
 

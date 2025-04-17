@@ -57,91 +57,218 @@ async function replaceImagePlaceholders(json: any): Promise<any> {
 
   if (!json || typeof json !== 'object') return json; // Basic type check
 
-  // --- Process Hero Section (Phase 3: Hardcoded Quark Images) ---
+  // Filter library into subsets
+  const productLibrary = library.filter((item) =>
+    item.path.includes('/products/'),
+  );
+  const heroLibrary = library.filter((item) => item.path.includes('-hero-'));
+
+  console.log(
+    `Filtered libraries: ${productLibrary.length} product images, ${heroLibrary.length} hero images.`,
+  );
+
+  // Helper function for finding the best match
+  async function findBestMatch(
+    description: string,
+    targetLibrary: LibraryImageData[],
+    options: {
+      threshold?: number;
+      alignment?: 'left' | 'right' | null;
+      applyThreshold: boolean; // Flag to control threshold application
+    },
+  ): Promise<LibraryImageData | null> {
+    if (!description || targetLibrary.length === 0) return null;
+
+    try {
+      const { embedding } = await embed({
+        model: EMBEDDING_MODEL,
+        value: description,
+      });
+
+      let bestMatchItem: LibraryImageData | null = null;
+      let highestSimilarity = -1;
+
+      for (const item of targetLibrary) {
+        if (
+          item.embedding &&
+          Array.isArray(item.embedding) &&
+          item.embedding.length > 0
+        ) {
+          // 1. Check alignment if required
+          if (options.alignment) {
+            const requiredSuffix = `-${options.alignment}.`; // e.g., -left.
+            if (!item.path.includes(requiredSuffix)) {
+              continue; // Skip if alignment doesn't match
+            }
+          }
+
+          // 2. Calculate similarity
+          const similarity = cosineSimilarity(embedding, item.embedding);
+
+          // 3. Check threshold if required
+          if (
+            options.applyThreshold &&
+            similarity < (options.threshold ?? -1)
+          ) {
+            continue; // Skip if below threshold and threshold is applied
+          }
+
+          // 4. Update best match if this one is better
+          if (similarity > highestSimilarity) {
+            highestSimilarity = similarity;
+            bestMatchItem = item;
+          }
+        } else {
+          console.warn(
+            `Skipping library item due to invalid embedding: ${item.url} `,
+          );
+        }
+      }
+
+      // Log results (optional, can be refined)
+      if (bestMatchItem) {
+        console.log(
+          `Match found for description: "${description}" (Similarity: ${highestSimilarity.toFixed(4)}, Alignment: ${options.alignment ?? 'N/A'}, Threshold Applied: ${options.applyThreshold}). Selected: ${bestMatchItem.url}`,
+        );
+      } else {
+        console.log(
+          `No suitable match found for description: "${description}" (Alignment: ${options.alignment ?? 'N/A'}, Threshold Applied: ${options.applyThreshold})`,
+        );
+      }
+
+      return bestMatchItem;
+    } catch (error) {
+      console.error('Error during embedding or similarity search:', error);
+      return null;
+    }
+  }
+
+  // --- Process Sections (including Hero) ---
   if (json.paths && typeof json.paths === 'object') {
     for (const pathKey in json.paths) {
       if (Array.isArray(json.paths[pathKey])) {
         for (const section of json.paths[pathKey]) {
+          // --- HERO SECTION PROCESSING ---
           if (section && section.id === 'HeroSection') {
-            // Case 1: Multi-slide structure
+            const processSlide = async (slide: any) => {
+              if (
+                !slide?.image ||
+                typeof slide.image.src !== 'string' ||
+                !slide.image.src.startsWith('https://yns.img?description=')
+              ) {
+                return; // Skip if not a valid placeholder
+              }
+
+              const placeholderUrl = slide.image.src;
+              const alignment = (
+                slide.boxAlignment?.toLowerCase() === 'right' ? 'right' : 'left'
+              ) as 'left' | 'right'; // Default to left if invalid/missing
+
+              try {
+                const url = new URL(placeholderUrl);
+                const description = url.searchParams.get('description');
+
+                if (description && heroLibrary.length > 0) {
+                  totalPlaceholders++;
+                  let finalMatchItem: LibraryImageData | null = null;
+
+                  // Attempt 1: Find best match with alignment and threshold
+                  finalMatchItem = await findBestMatch(
+                    description,
+                    heroLibrary,
+                    {
+                      alignment,
+                      threshold: SIMILARITY_THRESHOLD,
+                      applyThreshold: true,
+                    },
+                  );
+
+                  // Attempt 2 (Fallback 1): Find best match with alignment, ignoring threshold
+                  if (!finalMatchItem) {
+                    console.log(
+                      `Hero Fallback 1: Searching for alignment "${alignment}" without threshold...`,
+                    );
+                    finalMatchItem = await findBestMatch(
+                      description,
+                      heroLibrary,
+                      {
+                        alignment,
+                        applyThreshold: false,
+                      },
+                    );
+                  }
+
+                  // Apply result or final fallback
+                  if (finalMatchItem) {
+                    slide.image.src = finalMatchItem.url;
+                    successfulMatches++;
+                    console.log(
+                      `Hero Image Match: Replaced placeholder for alignment "${alignment}" with ${finalMatchItem.url}`,
+                    );
+                  } else {
+                    // Fallback 2: Use generic placeholder if no alignment match found at all
+                    slide.image.src = FALLBACK_IMAGE_URL;
+                    console.warn(
+                      `Hero Fallback 2: No image found matching alignment "${alignment}" for description "${description}". Using fallback URL.`,
+                    );
+                  }
+                } else if (!description) {
+                  console.warn(
+                    'Hero Placeholder URL missing description:',
+                    placeholderUrl,
+                  );
+                  slide.image.src = FALLBACK_IMAGE_URL;
+                } else {
+                  console.warn(
+                    'Hero library is empty, cannot process placeholder:',
+                    placeholderUrl,
+                  );
+                  slide.image.src = FALLBACK_IMAGE_URL;
+                }
+              } catch (error) {
+                console.error(
+                  'Error processing Hero Section placeholder:',
+                  placeholderUrl,
+                  error,
+                );
+                slide.image.src = FALLBACK_IMAGE_URL;
+              }
+            };
+
+            // Handle single or multi-slide structure
             if (Array.isArray(section.data?.slides)) {
               console.log(
                 `Processing HeroSection (Multi-slide) in path: ${pathKey}`,
               );
-              for (const slide of section.data.slides) {
-                if (slide?.image && typeof slide.boxAlignment === 'string') {
-                  const alignment = slide.boxAlignment.toLowerCase();
-                  let heroImageUrl =
-                    'https://ydwmassfcxbi4xdn.public.blob.vercel-storage.com/library/quark-sneaker/quark-hero-left.jpg';
-                  if (alignment === 'right') {
-                    heroImageUrl =
-                      'https://ydwmassfcxbi4xdn.public.blob.vercel-storage.com/library/quark-sneaker/quark-hero-right.jpg';
-                  } else if (alignment !== 'left') {
-                    console.warn(
-                      `HeroSection (Slide): Unexpected boxAlignment "${slide.boxAlignment}". Defaulting to left-aligned image.`,
-                    );
-                  }
-                  console.log(
-                    `  - Slide alignment: "${alignment}", Overriding image.src with: ${heroImageUrl}`,
-                  );
-                  slide.image.src = heroImageUrl;
-                } else {
-                  console.warn(
-                    'HeroSection slide missing image or boxAlignment:',
-                    slide,
-                  );
-                }
-              }
-            }
-            // Case 2: Single-slide structure
-            else if (
-              section.data?.image &&
-              typeof section.data.boxAlignment === 'string'
-            ) {
+              await Promise.all(section.data.slides.map(processSlide));
+            } else if (section.data?.image) {
               console.log(
                 `Processing HeroSection (Single-slide) in path: ${pathKey}`,
               );
-              const alignment = section.data.boxAlignment.toLowerCase();
-              let heroImageUrl =
-                'https://ydwmassfcxbi4xdn.public.blob.vercel-storage.com/library/quark-sneaker/quark-hero-left.jpg';
-              if (alignment === 'right') {
-                heroImageUrl =
-                  'https://ydwmassfcxbi4xdn.public.blob.vercel-storage.com/library/quark-sneaker/quark-hero-right.jpg';
-              } else if (alignment !== 'left') {
-                console.warn(
-                  `HeroSection (Single): Unexpected boxAlignment "${section.data.boxAlignment}". Defaulting to left-aligned image.`,
-                );
-              }
-              console.log(
-                `  - Section alignment: "${alignment}", Overriding image.src with: ${heroImageUrl}`,
-              );
-              section.data.image.src = heroImageUrl;
-            }
-            // Optional: Add an else block here to log if neither structure is matched
-            else {
+              await processSlide(section.data);
+            } else {
               console.warn(
-                'HeroSection found, but structure did not match expected single-slide or multi-slide patterns. Image not overridden.',
+                'HeroSection structure mismatch (expected slides array or image object):',
                 section.data,
               );
             }
           }
-          // --- Placeholder for Phase 4: Process Hero Section Placeholders ---
-          // else if (section && section.id === 'HeroSection' && ...) {
-          //  // Logic to handle description placeholders + alignment filtering
-          // }
+          // --- OTHER SECTION PROCESSING (e.g., FeatureSection - future) ---
+          // else if (section && section.id === 'FeatureSection') { ... }
         }
       }
     }
   }
 
-  // --- Process product images (Existing Logic) ---
-  if (Array.isArray(json.products)) {
-    totalPlaceholders = json.products.filter(
+  // --- Process product images ---
+  if (Array.isArray(json.products) && productLibrary.length > 0) {
+    const productPlaceholders = json.products.filter(
       (p: any) =>
         p &&
         typeof p.imageUrl === 'string' &&
         p.imageUrl.startsWith('https://yns.img?description='),
-    ).length;
+    );
+    totalPlaceholders += productPlaceholders.length;
 
     for (const product of json.products) {
       if (
@@ -149,79 +276,68 @@ async function replaceImagePlaceholders(json: any): Promise<any> {
         typeof product.imageUrl === 'string' &&
         product.imageUrl.startsWith('https://yns.img?description=')
       ) {
+        const placeholderUrl = product.imageUrl;
         try {
-          const url = new URL(product.imageUrl);
+          const url = new URL(placeholderUrl);
           const description = url.searchParams.get('description');
 
           if (description) {
-            // 1. Generate embedding for the AI's description
-            const { embedding } = await embed({
-              model: EMBEDDING_MODEL,
-              value: description,
-            });
+            const bestMatchItem = await findBestMatch(
+              description,
+              productLibrary,
+              {
+                threshold: SIMILARITY_THRESHOLD,
+                applyThreshold: true, // Threshold is strict for products
+                alignment: null, // No alignment needed for products
+              },
+            );
 
-            // 2. Find best match in the library
-            let bestMatchUrl = FALLBACK_IMAGE_URL;
-            let highestSimilarity = -1;
-            let bestMatchItem: LibraryImageData | null = null;
-
-            for (const item of library) {
-              // Ensure the library item has a valid embedding
-              if (
-                item.embedding &&
-                Array.isArray(item.embedding) &&
-                item.embedding.length > 0
-              ) {
-                const similarity = cosineSimilarity(embedding, item.embedding);
-                if (similarity > highestSimilarity) {
-                  highestSimilarity = similarity;
-                  if (similarity >= SIMILARITY_THRESHOLD) {
-                    bestMatchUrl = item.url; // Store URL of the best match above threshold
-                    bestMatchItem = item; // Store the best matching item itself
-                  }
-                }
-              } else {
-                console.warn(
-                  `Skipping library item due to invalid embedding: ${item.url}`,
-                );
-              }
-            }
-
-            if (bestMatchItem && bestMatchUrl !== FALLBACK_IMAGE_URL) {
-              // Log details including both descriptions
-              successfulMatches++; // Increment successful match count
+            if (bestMatchItem) {
+              product.imageUrl = bestMatchItem.url;
+              successfulMatches++;
               console.log(
-                `Image Match Found (Similarity: ${highestSimilarity.toFixed(4)})\n` +
-                  `  - Product: "${product.name || 'Unknown Product'}"\n` +
-                  `  - Placeholder Desc: "${description}"\n` +
-                  `  - Library Desc: "${bestMatchItem.description}"\n` +
-                  `  - Result URL: ${bestMatchUrl}`,
+                `Product Image Match: Replaced placeholder for "${product.name || 'Unknown'}" with ${bestMatchItem.url}`,
               );
             } else {
+              product.imageUrl = FALLBACK_IMAGE_URL;
               console.warn(
-                `No suitable image match found (Highest Similarity: ${highestSimilarity.toFixed(4)}) for description: "${description}". Using fallback.`,
+                `Product Image Match: No suitable image found for "${product.name || 'Unknown'}" (Desc: "${description}"). Using fallback.`,
               );
             }
-            product.imageUrl = bestMatchUrl;
           } else {
             console.warn(
-              'Placeholder URL missing description:',
-              product.imageUrl,
+              'Product Placeholder URL missing description:',
+              placeholderUrl,
             );
-            product.imageUrl = FALLBACK_IMAGE_URL; // Fallback if description is missing
+            product.imageUrl = FALLBACK_IMAGE_URL;
           }
         } catch (error) {
-          console.error('Error processing image placeholder:', error);
-          product.imageUrl = FALLBACK_IMAGE_URL; // Fallback on error
+          console.error(
+            'Error processing Product placeholder:',
+            placeholderUrl,
+            error,
+          );
+          product.imageUrl = FALLBACK_IMAGE_URL;
         }
       }
     }
+  } else if (Array.isArray(json.products) && productLibrary.length === 0) {
+    console.warn(
+      'Product library is empty, cannot process product image placeholders.',
+    );
+    // Optionally set all product placeholders to fallback
+    json.products.forEach((p: any) => {
+      if (
+        p &&
+        typeof p.imageUrl === 'string' &&
+        p.imageUrl.startsWith('https://yns.img?description=')
+      ) {
+        p.imageUrl = FALLBACK_IMAGE_URL;
+      }
+    });
   }
 
-  // TODO: Add logic here to replace placeholders in other locations
-  // (logo, ogimage, sections) when that task is implemented.
-
-  // Log statistics
+  // Log overall statistics
   if (totalPlaceholders > 0) {
     const successRate = ((successfulMatches / totalPlaceholders) * 100).toFixed(
       2,
@@ -230,9 +346,7 @@ async function replaceImagePlaceholders(json: any): Promise<any> {
       `Image Placeholder Stats: Processed=${totalPlaceholders}, Matched=${successfulMatches}, Success Rate=${successRate}%`,
     );
   } else {
-    console.log(
-      'Image Placeholder Stats: No product image placeholders found to process.',
-    );
+    console.log('Image Placeholder Stats: No placeholders found to process.');
   }
 
   return json;
