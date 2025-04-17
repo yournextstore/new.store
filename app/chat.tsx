@@ -245,24 +245,26 @@ export const ChatInner = ({ user }: { user: User }) => {
             {/* Display Store URL Link Below JSON */}
             <TabsContent
               value="preview"
-              className="bg-white flex min-h-full focus-visible:outline-none"
+              className="bg-white flex flex-col min-h-full focus-visible:outline-none"
             >
               {storeUrl && (
-                <div className="pt-4 border-t flex-1">
+                <>
                   <a
                     href={storeUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-blue-600 hover:underline break-all"
+                    className="text-blue-600 px-4 py-1 hover:underline break-all flex"
                   >
                     {storeUrl}
                   </a>
-                  <iframe
-                    src={storeUrl}
-                    title="Store Preview"
-                    className="w-full flex-1 h-full border-0"
-                  />
-                </div>
+                  <div className="border-t flex-1 flex">
+                    <iframe
+                      src={storeUrl}
+                      title="Store Preview"
+                      className="w-full flex-1 border-0"
+                    />
+                  </div>
+                </>
               )}
             </TabsContent>
           </div>
