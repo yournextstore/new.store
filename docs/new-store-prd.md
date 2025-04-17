@@ -18,22 +18,22 @@ This PRD defines the requirements for a proof of concept (PoC) to be completed i
 
 ## 2. User Flow
 
-1. **User Input:**  
-   - The user enters a description of their desired store into a text box.  
-   - The UI provides 2-3 predefined example buttons (e.g., "Fashion Store," "Electronics Store") that prefill the text box with sample prompts.  
+1. **User Input:**
+   - The user enters a description of their desired store into a text box.
+   - The UI provides 2-3 predefined example buttons (e.g., "Fashion Store," "Electronics Store") that prefill the text box with sample prompts.
 
-2. **AI Generation:**  
-   - Upon clicking "Generate," the AI agent processes the input and generates a JSON object defining the store's structure, content, and theme.  
+2. **AI Generation:**
+   - Upon clicking "Generate," the AI agent processes the input and generates a JSON object defining the store's structure, content, and theme.
 
-3. **Store Creation:**  
-   - The JSON is sent to Your Next Store's API, which returns either an error (if invalid) or a domain name for the created store.  
+3. **Store Creation:**
+   - The JSON is sent to Your Next Store's API, which returns either an error (if invalid) or a domain name for the created store.
 
-4. **Preview:**  
-   - The store is displayed in an iframe on the right side of the screen, with the user's prompt visible on the left for reference.  
+4. **Preview:**
+   - The store is displayed in an iframe on the right side of the screen, with the user's prompt visible on the left for reference.
    - There's also a separate toggle/switch for preview of the generated JSON code.
 
-**Rationale:**  
-- A simple, intuitive flow mirrors successful models like `new.email`, ensuring minimal input yields a tangible output.  
+**Rationale:**
+- A simple, intuitive flow mirrors successful models like `new.email`, ensuring minimal input yields a tangible output.
 - Predefined examples guide users, making the tool accessible even for vague or broad inputs.
 
 ---
@@ -41,34 +41,34 @@ This PRD defines the requirements for a proof of concept (PoC) to be completed i
 ## 3. Functional Requirements
 
 ### 3.1 User Interface (UI)
-- **Two-Column Layout:**  
-  - **Left Column:** Text box for user input with 2-3 predefined example buttons below.  
-  - **Right Column:** Iframe to display the live store preview once generated.  
+- **Two-Column Layout:**
+  - **Left Column:** Text box for user input with 2-3 predefined example buttons below.
+  - **Right Column:** Iframe to display the live store preview once generated.
   - **Toggle/Switch:** For preview of the generated JSON code.
-- **Input Guidance:**  
-  - Placeholder text in the input box (e.g., "Describe your store...").  
-  - Example buttons prefill prompts like "A modern fashion store with minimalist design."  
+- **Input Guidance:**
+  - Placeholder text in the input box (e.g., "Describe your store...").
+  - Example buttons prefill prompts like "A modern fashion store with minimalist design."
 
-**Rationale:**  
-- The two-column layout keeps the input visible alongside the result, providing context.  
+**Rationale:**
+- The two-column layout keeps the input visible alongside the result, providing context.
 - Predefined examples reduce user friction and ensure functional outputs.
 
 ### 3.2 AI Agent
-- **Input Processing:**  
-  - Accepts broad or specific descriptions, using defaults for vague inputs (e.g., generic store name, neutral theme).  
-- **Output:**  
+- **Input Processing:**
+  - Accepts broad or specific descriptions, using defaults for vague inputs (e.g., generic store name, neutral theme).
+- **Output:**
   - Generates a comprehensive JSON object conforming to the Your Next Store structure, including:
     - Store name and description.
     - Theme (from a predefined set).
     - 2-3 categories (e.g., "Men," "Women" for clothing).
     - Full definitions for 6-12 products including names, summaries, prices.
     - Generates **image placeholder URLs** (see Section 4.2.1) for required images (e.g., for HeroSection, FeatureSection, and individual products) instead of direct image URLs.
-- **Prompt Engineering:**  
-  - Uses the provided prototype prompt as a starting point.  
-  - Ensures valid JSON with OKLCH colors for the global palette and hex colors for section themes.  
+- **Prompt Engineering:**
+  - Uses the provided prototype prompt as a starting point.
+  - Ensures valid JSON with OKLCH colors for the global palette and hex colors for section themes.
 
-**Rationale:**  
-- Defaults ensure functionality with minimal input, aligning with the PoC's feasibility focus.  
+**Rationale:**
+- Defaults ensure functionality with minimal input, aligning with the PoC's feasibility focus.
 - The prototype prompt reduces initial engineering effort, though iteration may be needed.
 
 ### 3.3 API Integration
@@ -80,18 +80,18 @@ This PRD defines the requirements for a proof of concept (PoC) to be completed i
   - It inserts these selected image URLs into the JSON object, replacing the original placeholder URLs.
 - **Send JSON to Your Next Store:**
   - POST the **finalized** JSON (with image URLs included) to the Your Next Store API endpoint. The Your Next Store API is solely responsible for validating the structure and content of the submitted JSON; no pre-validation occurs in the `store.new` backend for this PoC.
-- **Handle API Response:**  
-  - Success: Retrieve the domain name and load the store in the iframe.  
-  - Error: Display a user-friendly message (e.g., "Unable to generate store. Please try again.").  
+- **Handle API Response:**
+  - Success: Retrieve the domain name and load the store in the iframe.
+  - Error: Display a user-friendly message (e.g., "Unable to generate store. Please try again.").
 
-**Rationale:**  
+**Rationale:**
 - Focusing on the core flow (input → AI → JSON → API → preview) keeps the PoC manageable within 10 days.
 
 ### 3.4 Preview
-- **Iframe Embedding:**  
-  - Load the store using the domain name returned by the API.  
-- **Error Handling:**  
-  - Display an error message if the API fails or the store cannot load.  
+- **Iframe Embedding:**
+  - Load the store using the domain name returned by the API.
+- **Error Handling:**
+  - Display an error message if the API fails or the store cannot load.
 
 ### 3.5 Product Images & Layout Images:
   - A library of ~200 categorized images (e.g., fashion, electronics, lifestyle) stored statically within the project repository.
@@ -107,16 +107,16 @@ This PRD defines the requirements for a proof of concept (PoC) to be completed i
 ## 4. Technical Architecture
 
 ### 4.1 Frontend (Next.js)
-- **UI Components:**  
-  - Text input with placeholder and example buttons.  
-  - Iframe for preview.  
-- **State Management:**  
-  - Manage user input, loading states, and error messages.  
+- **UI Components:**
+  - Text input with placeholder and example buttons.
+  - Iframe for preview.
+- **State Management:**
+  - Manage user input, loading states, and error messages.
 
 ### 4.2 Backend (Next.js API Routes)
-- **AI Integration:**  
-  - Use AI SDK to call GPT-4o with the user's prompt and prototype prompt.  
-- **JSON Generation:**  
+- **AI Integration:**
+  - Use AI SDK to call GPT-4o with the user's prompt and prototype prompt.
+- **JSON Generation:**
   - AI generates the initial JSON structure, including specially formatted **image placeholder URLs** where final image `src` values are needed. See Section 4.2.1 for details.
 
 #### 4.2.1 Image Placeholder and Selection Strategy
@@ -160,8 +160,8 @@ To communicate image requirements from the AI agent to the backend for lookup in
   - It replaces the original placeholder URL (e.g., `https://yns.img?...`) in the JSON with the selected static image URL (e.g., `/images/library/coffee_beans_close_up.jpg`).
   - Implements fallback logic (e.g., using a default placeholder image URL or logging a warning) if no suitable match is found above a certain similarity threshold.
 
-- **API Call:**  
-  - Send JSON to Your Next Store's API and process the response.  
+- **API Call:**
+  - Send JSON to Your Next Store's API and process the response.
 
 #### 4.2.2 Hero Section Image Selection Strategy
 
@@ -180,12 +180,12 @@ To communicate image requirements from the AI agent to the backend for lookup in
 - **PoC Scope:** The initial implementation focuses on `"left"` and `"right"` alignments using a limited set of foundational hero images (e.g., the Quark examples). Support for `"center"` alignment and a broader semantic range of hero images are deferred post-PoC. Filename convention is used for simplicity; a more robust metadata system could be adopted later.
 
 ### 4.3 Assets
-- **Predefined Themes:**  
-  - 3-5 themes (e.g., minimalist, vibrant, classic) with OKLCH color palettes.  
-- **Product Images:**  
+- **Predefined Themes:**
+  - 3-5 themes (e.g., minimalist, vibrant, classic) with OKLCH color palettes.
+- **Product Images:**
   - Categorized images (e.g., fashion, electronics) stored in a static JSON file or codebase. Images will be stored along with AI-generated English descriptions that will be used by the AI agent to select the right product images.
 
-**Rationale:**  
+**Rationale:**
 - Predefined assets simplify AI tasks, ensuring consistency and accelerating development.
 
 ---
@@ -202,23 +202,23 @@ To communicate image requirements from the AI agent to the backend for lookup in
 - **AI Output:**
   - Generates 2-3 categories and full definitions for 6-12 products (excluding final image URLs).
   - Provides **image placeholder URLs** containing descriptive text for all required images.
-- **API Response:**  
-  - Returns a domain name or an error message.  
+- **API Response:**
+  - Returns a domain name or an error message.
 
-**Rationale:**  
-- A static structure focuses the AI on content generation, simplifying the PoC.  
+**Rationale:**
+- A static structure focuses the AI on content generation, simplifying the PoC.
 - Predefined assets ensure consistency and reduce complexity.
 
 ### 5.2 Constraints
-- **Timeline:** 10 days with three senior engineers.  
-- **No Product Variants:** Products lack variants (e.g., size, color).  
-- **Minimal Error Handling:** Prioritizes core flow; edge cases are deferred.  
+- **Timeline:** 10 days with three senior engineers.
+- **No Product Variants:** Products lack variants (e.g., size, color).
+- **Minimal Error Handling:** Prioritizes core flow; edge cases are deferred.
 - **Static Image Embeddings:** Image description embeddings are generated offline by developers and committed; they are not generated dynamically or during the build.
 - **Image Description Format:** AI must generate image requirements using the specific placeholder URL format defined in Section 4.2.1.
 - **JSON Validation:** For the PoC, JSON validation is intentionally deferred to the receiving Your Next Store API. No separate validation layer will be built within the `store.new` backend.
 - **Detailed Error Handling:** Specific strategies for handling various error conditions (e.g., AI failures, image search fallbacks, API errors) will be defined during development.
 
-**Areas for Further Investigation:**  
+**Areas for Further Investigation:**
 - **Minimal Set of Paths:** Validate if `/collection/[slug]` is essential for the core PoC functionality or can be deferred.
 - **Image Descriptions and Matching Quality:** Ensure high-quality image descriptions in the static library and test the effectiveness of matching them against AI-generated descriptions extracted from placeholder URLs.
 - **AI Prompt Refinement:** Test and iterate the prototype prompt for consistent, valid JSON outputs, including correctly formatted image placeholder URLs with effective descriptions suitable for vector search.
@@ -267,7 +267,7 @@ The PoC will be delivered in four phases over 10 days:
 - [ ] Refine AI prompt to generate **image placeholder URLs** (as defined in Sec 4.2.1) for **logo, ogimage, and section images** (e.g., FeatureSection). *(Note: This task might need adjustment based on HeroSection implementation)*.
 - [ ] Test the Hero Section image selection flow end-to-end, ensuring correct image selection based on description and `boxAlignment`.
 
-**Rationale:**  
+**Rationale:**
 - Phased development prioritizes critical components (AI and infrastructure), and getting end-to-end flow working early, allowing iterative refinement later.
 
 ---
@@ -295,7 +295,7 @@ You are an AI agent tasked with generating a JSON description for an e-commerce 
 Here are the section types you can use, along with the structure of their "data" fields and available "theme" properties:
 
 - **HeroSection**: A prominent banner.
-  - **"data"**: 
+  - **"data"**:
     ```json
     {
       "title": string,
@@ -320,21 +320,21 @@ Here are the section types you can use, along with the structure of their "data"
     ```
 
 - **ProductGrid**: A grid of products.
-  - **"data"**: 
+  - **"data"**:
     ```json
     { "first": number, "collection": string | null }
     ```
   - **"theme"**: Set to `{}` to inherit from the global palette. No specific theme properties are available.
 
 - **CollectionGrid**: A grid of collections.
-  - **"data"**: 
+  - **"data"**:
     ```json
     { "collections": Array<{ "slug": string }> }
     ```
   - **"theme"**: Set to `{}` to inherit from the global palette. No specific theme properties are available.
 
 - **Nav**: Navigation bar (required in "%layout").
-  - **"data"**: 
+  - **"data"**:
     ```json
     { "title": string | null, "links": Array<{ "label": string, "href": string }>, "searchBar": { "show": boolean } }
     ```
@@ -352,7 +352,7 @@ Here are the section types you can use, along with the structure of their "data"
     ```
 
 - **Footer**: Footer (required in "%layout").
-  - **"data"**: 
+  - **"data"**:
     ```json
     { "sections": Array<{ "header": string, "links": Array<{ "label": string, "href": string }> }>, "name": string | null, "tagline": string | null, "credits": boolean }
     ```
@@ -373,14 +373,14 @@ Here are the section types you can use, along with the structure of their "data"
   - **"theme"**: Set to `{}` to inherit from the global palette.
 
 - **Title**: Page title.
-  - **"data"**: 
+  - **"data"**:
     ```json
     { "title": string }
     ```
   - **"theme"**: Set to `{}` to inherit from the global palette.
 
 - **Markdown**: Text content in TipTap format.
-  - **"data"**: 
+  - **"data"**:
     ```json
     { "content": object }
     ```
@@ -407,14 +407,14 @@ Here are the section types you can use, along with the structure of their "data"
   - **"theme"**: Set to `{}` to inherit from the global palette.
 
 - **FeatureSection**: Highlighted feature with text and image.
-  - **"data"**: 
+  - **"data"**:
     ```json
     { "title": string, "description": string, "image_alt": string, "image_src": string | null, "image_position": "left" | "right" }
     ```
   - **"theme"**: Set to `{}` to inherit from the global palette.
 
 - **CountdownWidget**: Countdown timer.
-  - **"data"**: 
+  - **"data"**:
     ```json
     { "text": string, "targetDate": string | null }
     ```
@@ -453,8 +453,8 @@ For all sections:
 
 #### 3. Handling "settings"
 - **Hardcoded Values**: Use these exactly as provided:
-  - `"logo"`: { "width": 5049, "height": 3557, "imageUrl": "https://jtit1h3gvnocbut8.public.blob.vercel-storage.com/images/019426bf-cd97-72b8-8c5a-0b3bfc9b361e/test/pexels-bocman-33930-VTEooBiy8xhenQ0Z59NtiT9CeKN7HF.jpg" }
-  - `"ogimage"`: "https://jtit1h3gvnocbut8.public.blob.vercel-storage.com/images/019426bf-cd97-72b8-8c5a-0b3bfc9b361e/test/pexels-pixabay-279906-jfAMlw95x6DF81jYo250YQDlLuVShJ.jpg"
+  - `"logo"`: { "width": 1024, "height": 1024, "imageUrl": "https://yns.app/icon.png" }
+  - `"ogimage"`: "https://yournextstore.com/opengraph-image.png"
 - **Generated Values**:
   - `"colors"`: Generate a `"palette"` object based on the user's description of their store. Include keys such as `"theme"`, `"theme-nav"`, `"theme-button"`, `"theme-footer"`, and `"theme-primary"`, each with sub-properties like `"DEFAULT"` and `"background"`. Assign OKLCH color values (e.g., "50% 0.1 120") that reflect the store's theme (e.g., modern, vintage). If no design preference is specified, use a default neutral palette.
   - `"storeName"`: Extract from the user's prompt (e.g., "Tech Gadgets"); default to "Your Store" if not specified.

@@ -16,7 +16,7 @@ You are an AI agent tasked with generating a JSON description for an e-commerce 
 Here are the section types you can use, along with the structure of their "data" fields and available "theme" properties:
 
 - **HeroSection**: A prominent banner.
-  - **"data"**: 
+  - **"data"**:
     ```json
     {
       "title": string,
@@ -41,21 +41,21 @@ Here are the section types you can use, along with the structure of their "data"
     ```
 
 - **ProductGrid**: A grid of products.
-  - **"data"**: 
+  - **"data"**:
     ```json
     { "first": number, "collection": string | null }
     ```
   - **"theme"**: Set to `{}` to inherit from the global palette. No specific theme properties are available.
 
 - **CollectionGrid**: A grid of collections.
-  - **"data"**: 
+  - **"data"**:
     ```json
     { "collections": Array<{ "slug": string }> }
     ```
   - **"theme"**: Set to `{}` to inherit from the global palette. No specific theme properties are available.
 
 - **Nav**: Navigation bar (required in "%layout").
-  - **"data"**: 
+  - **"data"**:
     ```json
     { "title": string | null, "links": Array<{ "label": string, "href": string }>, "searchBar": { "show": boolean } }
     ```
@@ -73,7 +73,7 @@ Here are the section types you can use, along with the structure of their "data"
     ```
 
 - **Footer**: Footer (required in "%layout").
-  - **"data"**: 
+  - **"data"**:
     ```json
     { "sections": Array<{ "header": string, "links": Array<{ "label": string, "href": string }> }>, "name": string | null, "tagline": string | null, "credits": boolean }
     ```
@@ -94,14 +94,14 @@ Here are the section types you can use, along with the structure of their "data"
   - **"theme"**: Set to `{}` to inherit from the global palette.
 
 - **Title**: Page title.
-  - **"data"**: 
+  - **"data"**:
     ```json
     { "title": string }
     ```
   - **"theme"**: Set to `{}` to inherit from the global palette.
 
 - **Markdown**: Text content in TipTap format.
-  - **"data"**: 
+  - **"data"**:
     ```json
     { "content": object }
     ```
@@ -128,14 +128,14 @@ Here are the section types you can use, along with the structure of their "data"
   - **"theme"**: Set to `{}` to inherit from the global palette.
 
 - **FeatureSection**: Highlighted feature with text and image.
-  - **"data"**: 
+  - **"data"**:
     ```json
     { "title": string, "description": string, "image_alt": string, "image_src": string | null, "image_position": "left" | "right" }
     ```
   - **"theme"**: Set to `{}` to inherit from the global palette.
 
 - **CountdownWidget**: Countdown timer.
-  - **"data"**: 
+  - **"data"**:
     ```json
     { "text": string, "targetDate": string | null }
     ```
@@ -174,8 +174,8 @@ For all sections:
 
 #### 3. Handling "settings"
 - **Hardcoded Values**: Use these exactly as provided:
-  - `"logo"`: { "width": 5049, "height": 3557, "imageUrl": "https://jtit1h3gvnocbut8.public.blob.vercel-storage.com/images/019426bf-cd97-72b8-8c5a-0b3bfc9b361e/test/pexels-bocman-33930-VTEooBiy8xhenQ0Z59NtiT9CeKN7HF.jpg" }
-  - `"ogimage"`: "https://jtit1h3gvnocbut8.public.blob.vercel-storage.com/images/019426bf-cd97-72b8-8c5a-0b3bfc9b361e/test/pexels-pixabay-279906-jfAMlw95x6DF81jYo250YQDlLuVShJ.jpg"
+  - `"logo"`: { "width": 1024, "height": 1024, "imageUrl": "https://yns.app/icon.png" }
+  - `"ogimage"`: "https://yournextstore.com/opengraph-image.png"
 - **Generated Values**:
   - `"colors"`: Generate a `"palette"` object based on the user's description of their store. Include keys such as `"theme"`, `"theme-nav"`, `"theme-button"`, `"theme-footer"`, and `"theme-primary"`, each with sub-properties like `"DEFAULT"` and `"background"`. Assign OKLCH color values (e.g., "50% 0.1 120") that reflect the store's theme (e.g., modern, vintage). If no design preference is specified, use a default neutral palette.
   - `"storeName"`: Extract from the user's prompt (e.g., "Tech Gadgets"); default to "Your Store" if not specified.

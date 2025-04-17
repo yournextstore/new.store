@@ -56,7 +56,7 @@ Below are the section types supported by the Your Next Store platform, along wit
     ```
 
 - **ProductGrid**: A grid or carousel of products.
-  - **"data"**: 
+  - **"data"**:
     ```json
     {
       "productLayout": "grid" | "carousel",
@@ -67,7 +67,7 @@ Below are the section types supported by the Your Next Store platform, along wit
   - **"theme"**: Set to `{}` to inherit from the global palette.
 
 - **CollectionGrid**: A grid of collections.
-  - **"data"**: 
+  - **"data"**:
     ```json
     {
       "collections": Array<{ "slug": string }> | null
@@ -76,7 +76,7 @@ Below are the section types supported by the Your Next Store platform, along wit
   - **"theme"**: Set to `{}` to inherit from the global palette.
 
 - **Nav**: Navigation bar (required in "%layout").
-  - **"data"**: 
+  - **"data"**:
     ```json
     {
       "title": string,
@@ -90,7 +90,7 @@ Below are the section types supported by the Your Next Store platform, along wit
     - `"color"`: Text color of the links.
 
 - **Footer**: Footer (required in "%layout").
-  - **"data"**: 
+  - **"data"**:
     ```json
     {
       "sections": Array<{ "header": string, "links": Array<{ "label": string, "href": string }> }>,
@@ -108,14 +108,14 @@ Below are the section types supported by the Your Next Store platform, along wit
   - **"theme"**: Set to `{}` to inherit from the global palette.
 
 - **Title**: Page title.
-  - **"data"**: 
+  - **"data"**:
     ```json
     { "title": string }
     ```
   - **"theme"**: Set to `{}` to inherit from the global palette.
 
 - **Markdown**: Text content in TipTap JSON format.
-  - **"data"**: 
+  - **"data"**:
     ```json
     { "content": object }
     ```
@@ -123,7 +123,7 @@ Below are the section types supported by the Your Next Store platform, along wit
   - **"theme"**: Set to `{}` to inherit from the global palette.
 
 - **ProductDetails**: Product details (for dynamic routes).
-  - **"data"**: 
+  - **"data"**:
     ```json
     {
       "imageLayout": "main" | "grid",
@@ -138,7 +138,7 @@ Below are the section types supported by the Your Next Store platform, along wit
     - `"buttonTextColor"`: Button text color.
 
 - **ProductDescription**: Product description (for dynamic routes).
-  - **"data"**: 
+  - **"data"**:
     ```json
     { "content": object }
     ```
@@ -154,7 +154,7 @@ Below are the section types supported by the Your Next Store platform, along wit
   - **"theme"**: Set to `{}` to inherit from the global palette.
 
 - **FeatureSection**: Highlighted feature with text and image.
-  - **"data"**: 
+  - **"data"**:
     ```json
     {
       "title": string,
@@ -167,7 +167,7 @@ Below are the section types supported by the Your Next Store platform, along wit
   - **"theme"**: Set to `{}` to inherit from the global palette.
 
 - **BannerSection**: Countdown timer or banner.
-  - **"data"**: 
+  - **"data"**:
     ```json
     {
       "text": string,
@@ -186,7 +186,7 @@ Below are the section types supported by the Your Next Store platform, along wit
     - `"color"`: Text color of the links.
 
 - **Breadcrumbs**: Displays navigation breadcrumbs. *(Supported by Your Next Store, but out of scope for the AI agent; to be supported in the future.)*
-  - **"data"**: 
+  - **"data"**:
     ```json
     {
       "title": string,
@@ -327,8 +327,8 @@ Below are the section types supported by the Your Next Store platform, along wit
   - `"fontFamily"`: Set based on user preference or default to `"merriweather"`.
 - **Hardcoded Values**:
   - Use hardcoded values for `"logo"` and `"ogimage"` as specified:
-    - `"logo"`: { "width": 5049, "height": 3557, "imageUrl": "https://jtit1h3gvnocbut8.public.blob.vercel-storage.com/images/019426bf-cd97-72b8-8c5a-0b3bfc9b361e/test/pexels-bocman-33930-VTEooBiy8xhenQ0Z59NtiT9CeKN7HF.jpg" }
-    - `"ogimage"`: "https://jtit1h3gvnocbut8.public.blob.vercel-storage.com/images/019426bf-cd97-72b8-8c5a-0b3bfc9b361e/test/pexels-pixabay-279906-jfAMlw95x6DF81jYo250YQDlLuVShJ.jpg"
+    - `"logo"`: { "width": 1024, "height": 1024, "imageUrl": "https://yns.app/icon.png" }
+    - `"ogimage"`: "https://yournextstore.com/opengraph-image.png"
   - If the user doesn't specify navigation, include links to "/", "/products", and mentioned collections.
   - For `ProductGrid`, set `"first": 12` by default.
 
