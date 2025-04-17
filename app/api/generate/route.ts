@@ -194,9 +194,13 @@ export async function POST(req: Request) {
 
     // Check that {user_prompt} is present in the prototypePrompt
     if (!prototypePrompt.includes('{user_prompt}')) {
+      // This shouldn't happen if the prompt file is correct
+      console.error(
+        'Critical Error: Prompt placeholder {user_prompt} not found in gen-store-json-prompt.md',
+      );
       return NextResponse.json(
-        { error: 'Prompt placeholder not found in prototype prompt' },
-        { status: 400 },
+        { error: 'Internal Server Error: Invalid prompt configuration' },
+        { status: 500 },
       );
     }
 
@@ -217,19 +221,17 @@ export async function POST(req: Request) {
 
     const endTime = Date.now(); // Record end time
     const generationTimeMs = endTime - startTime; // Calculate duration
+    console.log(`AI generation took ${generationTimeMs}ms`);
 
     // Parse the AI's response as JSON
     let generatedJson: unknown;
     try {
-      // remove markdownesque formatting
-      // remove leading ```json and trailing ```
-      generatedJson = JSON.parse(
-        text
-          .trim()
-          .replaceAll(/^```json/g, '')
-          .replaceAll(/```$/g, '')
-          .trim(),
-      );
+      // Attempt to remove markdown fences if present
+      const cleanedText = text
+        .trim()
+        .replace(/^```json\s*/, '')
+        .replace(/\s*```$/, '');
+      generatedJson = JSON.parse(cleanedText);
     } catch (parseError) {
       console.error('JSON Parsing Error:', parseError);
       console.error('Raw AI Response:', text); // Log the raw text for debugging
@@ -237,7 +239,7 @@ export async function POST(req: Request) {
         {
           error: 'Failed to parse AI response as JSON',
           details: (parseError as Error).message,
-          rawResponse: text,
+          rawResponse: text, // Include raw response for debugging
         },
         { status: 500 },
       );
@@ -256,13 +258,29 @@ export async function POST(req: Request) {
     // --- Call YNS API ---
     const ynsApiUrl = `${process.env.NEXT_PUBLIC_YNS_API_URL}/admin/ai-test/import?userId=${userId}`;
     console.log(`Calling YNS API: ${ynsApiUrl}`);
+    const ynsApiKey = process.env.YNS_AI_API_KEY;
+
+    if (!ynsApiKey) {
+      console.error('YNS_AI_API_KEY environment variable is not set.');
+      return NextResponse.json(
+        { error: 'Internal Server Error: API key configuration missing.' },
+        { status: 500 },
+      );
+    }
+    if (!process.env.YNS_API_URL) {
+      console.error('YNS_API_URL environment variable is not set.');
+      return NextResponse.json(
+        { error: 'Internal Server Error: YNS API URL configuration missing.' },
+        { status: 500 },
+      );
+    }
 
     try {
       const ynsResponse = await fetch(ynsApiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${process.env.YNS_AI_API_KEY}`,
+          Authorization: `Bearer ${ynsApiKey}`,
         },
         body: JSON.stringify(finalJson), // Send the JSON with replaced image URLs
       });
@@ -270,12 +288,20 @@ export async function POST(req: Request) {
       if (!ynsResponse.ok) {
         const errorText = await ynsResponse.text();
         console.error(`YNS API Error (${ynsResponse.status}): ${errorText}`);
+        // Attempt to parse error response if JSON
+        let errorDetails: any = errorText;
+        try {
+          errorDetails = JSON.parse(errorText);
+        } catch (e) {
+          /* Ignore if not JSON */
+        }
+
         return NextResponse.json(
           {
-            error: 'Failed to create store on YNS platform',
-            details: errorText,
+            error: `Failed to create store on YNS platform (Status: ${ynsResponse.status})`,
+            details: errorDetails, // Forward parsed or raw error
           },
-          { status: ynsResponse.status },
+          { status: ynsResponse.status }, // Forward status code
         );
       }
 
@@ -309,13 +335,13 @@ export async function POST(req: Request) {
         );
       }
       return NextResponse.json(
-        { error: 'Failed to communicate with YNS platform' },
+        { error: 'Failed to communicate with YNS platform (Unknown Error)' },
         { status: 500 },
       );
     }
     // --- End YNS API Call ---
   } catch (error) {
-    console.error('API Error:', error);
+    console.error('API Error in POST handler:', error);
     // Consider more specific error handling based on potential errors from generateText
     if (error instanceof Error) {
       return NextResponse.json(
@@ -324,7 +350,7 @@ export async function POST(req: Request) {
       );
     }
     return NextResponse.json(
-      { error: 'Internal Server Error' },
+      { error: 'Internal Server Error (Unknown)' },
       { status: 500 },
     );
   }
