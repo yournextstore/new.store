@@ -100,7 +100,7 @@ export const ChatInner = ({ user }: { user: User }) => {
     <div className="grid grid-cols-5 gap-4 h-screen px-4">
       {/* Left Column: Input Form */}
       <div className="flex flex-col space-y-4 col-span-2">
-        <h1 className="text-2xl font-bold">Generate Your Store</h1>
+        <h1 className="text-2xl font-bold">Generate Your Next Store</h1>
 
         <p className="font-semibold">
           Logged in as {user.name} ({user.email})
@@ -119,7 +119,15 @@ export const ChatInner = ({ user }: { user: User }) => {
         />
         <div className="flex gap-2 flex-wrap">
           {/* Example Buttons */}
-          <Button variant="outline" onClick={() => setPrompt('Minimalist shoes designed for everyday comfort, style, and motion.')} disabled={isLoading}>
+          <Button
+            variant="outline"
+            onClick={() =>
+              setPrompt(
+                'Minimalist shoes designed for everyday comfort, style, and motion.',
+              )
+            }
+            disabled={isLoading}
+          >
             Minimalist Shoes Store Example
           </Button>
           {/* <Button
@@ -241,7 +249,7 @@ export const ChatInner = ({ user }: { user: User }) => {
                     {storeUrl}
                   </a>
                   <iframe
-                    src="https://esu-honowa.yns.cx/"
+                    src={storeUrl}
                     title="Store Preview"
                     className="w-full flex-1 h-full border-0"
                   />
