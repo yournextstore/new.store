@@ -1,6 +1,6 @@
 ## Prompt for AI Agent
 
-You are an AI agent tasked with generating a JSON description for an e-commerce store on the YourNextStore platform based on a user's natural language prompt describing their store. Your output must conform to the platform's JSON structure, which includes "paths" for page layouts and "settings" for global configurations. Below are the guidelines and structure you must follow.
+You are an AI agent tasked with generating a JSON description for an e-commerce store on the Your Next Store platform based on a user's natural language prompt describing their store. Your output must conform to the platform's JSON structure, which includes "paths" for page layouts and "settings" for global configurations. Below are the guidelines and structure you must follow.
 
 ---
 

@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-`store.new` is a service hosted at `store.new` that enables users to create a functional e-commerce store on the YourNextStore platform by providing a natural language description of their desired store (e.g., "a luxury candle store with a minimalist theme"). An AI agent, powered by GPT-4o, generates a comprehensive JSON description based on the user's input, which is sent to YourNextStore via a single API endpoint to create the store. The YourNextStore API only validates and stores this JSON. The process concludes with a live preview of the generated store displayed in the browser.
+`store.new` is a service hosted at `store.new` that enables users to create a functional e-commerce store on the Your Next Store platform by providing a natural language description of their desired store (e.g., "a luxury candle store with a minimalist theme"). An AI agent, powered by GPT-4o, generates a comprehensive JSON description based on the user's input, which is sent to Your Next Store via a single API endpoint to create the store. The Your Next Store API only validates and stores this JSON. The process concludes with a live preview of the generated store displayed in the browser.
 
 This PRD defines the requirements for a proof of concept (PoC) to be completed in 10 days by a team of three senior engineers. The focus is on delivering a minimal, functional end-to-end flow, leveraging the team's expertise to handle implementation details.
 
@@ -26,7 +26,7 @@ This PRD defines the requirements for a proof of concept (PoC) to be completed i
    - Upon clicking "Generate," the AI agent processes the input and generates a JSON object defining the store's structure, content, and theme.  
 
 3. **Store Creation:**  
-   - The JSON is sent to YourNextStore's API, which returns either an error (if invalid) or a domain name for the created store.  
+   - The JSON is sent to Your Next Store's API, which returns either an error (if invalid) or a domain name for the created store.  
 
 4. **Preview:**  
    - The store is displayed in an iframe on the right side of the screen, with the user's prompt visible on the left for reference.  
@@ -57,7 +57,7 @@ This PRD defines the requirements for a proof of concept (PoC) to be completed i
 - **Input Processing:**  
   - Accepts broad or specific descriptions, using defaults for vague inputs (e.g., generic store name, neutral theme).  
 - **Output:**  
-  - Generates a comprehensive JSON object conforming to the YourNextStore structure, including:
+  - Generates a comprehensive JSON object conforming to the Your Next Store structure, including:
     - Store name and description.
     - Theme (from a predefined set).
     - 2-3 categories (e.g., "Men," "Women" for clothing).
@@ -73,13 +73,13 @@ This PRD defines the requirements for a proof of concept (PoC) to be completed i
 
 ### 3.3 API Integration
 - **Backend Processing:**
-  - Before sending to YourNextStore, the backend intercepts the AI-generated JSON.
+  - Before sending to Your Next Store, the backend intercepts the AI-generated JSON.
   - It identifies special **image placeholder URLs** (see Section 4.2.1) within the JSON structure.
   - It parses these placeholders to extract the AI-generated description for the desired image.
   - It uses these *specific* descriptions to select appropriate image URLs from a predefined library via in-memory vector similarity search against pre-computed embeddings (associated with the library images' descriptions).
   - It inserts these selected image URLs into the JSON object, replacing the original placeholder URLs.
-- **Send JSON to YourNextStore:**
-  - POST the **finalized** JSON (with image URLs included) to the YourNextStore API endpoint. The YourNextStore API is solely responsible for validating the structure and content of the submitted JSON; no pre-validation occurs in the `store.new` backend for this PoC.
+- **Send JSON to Your Next Store:**
+  - POST the **finalized** JSON (with image URLs included) to the Your Next Store API endpoint. The Your Next Store API is solely responsible for validating the structure and content of the submitted JSON; no pre-validation occurs in the `store.new` backend for this PoC.
 - **Handle API Response:**  
   - Success: Retrieve the domain name and load the store in the iframe.  
   - Error: Display a user-friendly message (e.g., "Unable to generate store. Please try again.").  
@@ -161,7 +161,7 @@ To communicate image requirements from the AI agent to the backend for lookup in
   - Implements fallback logic (e.g., using a default placeholder image URL or logging a warning) if no suitable match is found above a certain similarity threshold.
 
 - **API Call:**  
-  - Send JSON to YourNextStore's API and process the response.  
+  - Send JSON to Your Next Store's API and process the response.  
 
 #### 4.2.2 Hero Section Image Selection Strategy
 
@@ -215,7 +215,7 @@ To communicate image requirements from the AI agent to the backend for lookup in
 - **Minimal Error Handling:** Prioritizes core flow; edge cases are deferred.  
 - **Static Image Embeddings:** Image description embeddings are generated offline by developers and committed; they are not generated dynamically or during the build.
 - **Image Description Format:** AI must generate image requirements using the specific placeholder URL format defined in Section 4.2.1.
-- **JSON Validation:** For the PoC, JSON validation is intentionally deferred to the receiving YourNextStore API. No separate validation layer will be built within the `store.new` backend.
+- **JSON Validation:** For the PoC, JSON validation is intentionally deferred to the receiving Your Next Store API. No separate validation layer will be built within the `store.new` backend.
 - **Detailed Error Handling:** Specific strategies for handling various error conditions (e.g., AI failures, image search fallbacks, API errors) will be defined during development.
 
 **Areas for Further Investigation:**  
@@ -253,7 +253,7 @@ The PoC will be delivered in four phases over 10 days:
 
 ### Phase 3: Backend Image Selection and API Integration (Days 6-7)
 - [x] Implement backend logic to parse **image placeholder URLs**, load static embeddings, generate query embeddings using the Vercel AI SDK (`embed`), perform linear vector search using Vercel AI SDK primitives (`cosineSimilarity`), select the best match, and inject final image URLs into the JSON object (as defined in Sec 4.2.1). Implement basic fallback logic.
-- [x] Integrate with YourNextStore's API to send the finalized JSON and retrieve the store domain.
+- [x] Integrate with Your Next Store's API to send the finalized JSON and retrieve the store domain.
 - [x] Add initial hero images (e.g., Quark examples) to `./public/images/library/` following the layout filename convention (`*-left.jpg`, `*-right.jpg`) as described in Section 4.2.2.
 - [ ] Refine AI prompt (`app/api/generate/gen-store-json-prompt.md`) to generate `boxAlignment` (left/right only) as detailed in Section 4.2.2, and the backend to always select hero image from the quark example. There won't be any placeholder URLs for the hero image at this stage.
 
@@ -278,7 +278,7 @@ Below is an example of a prototype of the prompt to the AI agent; it should serv
 `````markdown
 ## Prompt for AI Agent
 
-You are an AI agent tasked with generating a JSON description for an e-commerce store on the YourNextStore platform based on a user's natural language prompt describing their store. Your output must conform to the platform's JSON structure, which includes "paths" for page layouts and "settings" for global configurations. Below are the guidelines and structure you must follow.
+You are an AI agent tasked with generating a JSON description for an e-commerce store on the Your Next Store platform based on a user's natural language prompt describing their store. Your output must conform to the platform's JSON structure, which includes "paths" for page layouts and "settings" for global configurations. Below are the guidelines and structure you must follow.
 
 ---
 
@@ -530,4 +530,4 @@ This prompt has several simplifications (e.g. the hardcoded logo/ogimage URLs) t
 
 - https://yns.app/admin/ai-test - UI (textbox input) for testing the JSON representation of a store.
 - https://yns.app/admin/ai-test/schema.json - JSON schema for the store's JSON representation.
-- https://yns.app/admin/ai-test/store.json - a dump of JSON object representing a store currently in the YourNextStore database.
+- https://yns.app/admin/ai-test/store.json - a dump of JSON object representing a store currently in the Your Next Store database.

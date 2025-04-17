@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   metadataBase: new URL('https://chat.vercel.ai'),
   title: 'new.store',
   description:
-    'new.store is a tool for generating storefronts for YourNextStore using AI.',
+    'new.store is a tool for generating storefronts for Your Next Store using AI.',
 };
 
 export const viewport = {
