@@ -258,8 +258,8 @@ The PoC will be delivered in four phases over 10 days:
 - [x] Refine AI prompt (`app/api/generate/gen-store-json-prompt.md`) to generate `boxAlignment` (left/right only) as detailed in Section 4.2.2, and the backend to always select hero image from the quark example. There won't be any placeholder URLs for the hero image at this stage.
 
 ### Phase 4: Testing and Refinement (Days 8-10)
-- [ ] Test end-to-end flow with various inputs (broad and specific).
-- [ ] Refine the AI prompt based on output quality.
+- [x] Test end-to-end flow with various inputs (broad and specific).
+- [x] Refine the AI prompt based on output quality.
   - [x] Make hero text box colors consistent with the assumed white background of the hero images.
 - [x] Ensure the preview loads correctly and the store is functional.
 - [x] Refine AI prompt (`app/api/generate/gen-store-json-prompt.md`) to include `HeroSection.data.image.src` in the placeholder URL mechanism and generate `boxAlignment` (left/right only) as detailed in Section 4.2.2.
