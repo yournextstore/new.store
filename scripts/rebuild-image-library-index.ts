@@ -39,10 +39,10 @@ Example Output:
 }
 `;
 const EMBEDDING_MODEL = openai.embedding('text-embedding-3-small');
-const DESCRIPTION_MODEL = openai('gpt-4o');
+const DESCRIPTION_MODEL = openai('gpt-4.1-mini');
 const API_TIMEOUT_MS = 60000;
 const MAX_RETRIES = 3;
-const CONCURRENCY = 8;
+const CONCURRENCY = 16;
 
 // Check for Vercel Blob token and URL
 if (!process.env.BLOB_READ_WRITE_TOKEN) {
