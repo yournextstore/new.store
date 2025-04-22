@@ -18,7 +18,7 @@ export function BetterAuthView({
   }, []);
 
   return (
-    <main className="flex flex-col grow p-4 items-center justify-center">
+    <main className="flex h-screen grow flex-col items-center justify-center p-4">
       <Suspense>
         <AuthCard pathname={pathname} view={view} className="w-sm max-w-full" />
       </Suspense>
