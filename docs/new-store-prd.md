@@ -532,3 +532,200 @@ This prompt has several simplifications (e.g. the hardcoded logo/ogimage URLs) t
 - https://yns.app/admin/ai-test - UI (textbox input) for testing the JSON representation of a store.
 - https://yns.app/admin/ai-test/schema.json - JSON schema for the store's JSON representation.
 - https://yns.app/admin/ai-test/store.json - a dump of JSON object representing a store currently in the Your Next Store database.
+
+---
+
+## 8. Post-PoC Feature Development
+
+With the successful completion of the initial 10-day PoC (Proof of Concept), the following features are planned for the next phase of development.
+
+### 8.1 On-Demand Product Image Generation (getimg.ai)
+
+**Goal:** Provide users the option to generate unique product images on-demand using a text-to-image service (`getimg.ai`), instead of relying solely on the static image library.
+
+**User Flow & Experience:**
+- A toggle or selection mechanism will be added to the UI allowing users to choose between:
+  - "Use Stock Images" (current behavior: static library lookup via vector search).
+  - "Generate New Images" (new behavior: `getimg.ai` generation).
+- Image generation applies **only to product images** (`products[].imageUrl`). Hero images, logos, section images, etc., will continue to use the existing static library lookup or placeholder mechanisms described in the PoC.
+- The store generation process will **block** UI interaction until both JSON generation and product image generation (if selected) are complete. Latency will increase compared to the static library path.
+- **No user controls** for re-generating images or modifying prompts are planned for the initial version (KISS principle).
+- Basic error handling will be implemented (e.g., displaying a message if `getimg.ai` fails).
+- *(Optional/Stretch Goal)*: Stream status updates to the frontend indicating the current phase (e.g., "Generating JSON...", "Generating product images...").
+
+**Technical Implementation:**
+- **Conditional Backend Logic:** The `/api/generate` backend route will contain conditional logic based on the user's UI selection.
+- **Generation Path:**
+  - The AI agent will still generate JSON containing `https://yns.img?description=...` placeholder URLs for product images.
+  - If "Generate New Images" is selected, the backend intercepts the JSON.
+  - For each product image placeholder:
+    - Extract the URL-decoded `description`. *(Note: Investigate if these descriptions need refinement to serve as effective text-to-image prompts)*.
+    - Call the `getimg.ai` text-to-image API using the description. Parallelize API calls for efficiency, respecting potential `getimg.ai` concurrency limits. A fixed image size (e.g., 1024x1024) will be requested.
+    - Handle API responses, including potential errors (e.g., rate limits, content flags). *(Note: Detailed error handling strategies need further investigation)*.
+    - Download the generated image from the `getimg.ai` URL.
+    - Upload the downloaded image to Vercel Blob storage (e.g., under `/images/generated/<unique_id>.png`).
+    - Store the original generation `description` (prompt) as metadata associated with the image file in Vercel Blob.
+    - Replace the original placeholder URL in the JSON with the new Vercel Blob URL for the generated image.
+- **Static Library Path:** If "Use Stock Images" is selected, the existing logic (vector search on static library based on placeholder description) remains unchanged.
+- **Final JSON:** The finalized JSON (with either static or generated product image URLs) is sent to the Your Next Store API.
+- **Security & Cost:** The `getimg.ai` API key will be stored securely (env vars). Basic rate limiting or usage caps will be configured on the `getimg.ai` service side to manage costs.
+
+**Considerations:**
+- **Prompt Quality:** Descriptions optimized for similarity search might not be optimal for image generation. Prompt refinement or adaptation might be needed.
+- **Error Handling:** Define robust handling for `getimg.ai` API errors and upload failures.
+- **Latency:** Parallelizing calls is crucial to manage the added latency.
+- **Stylistic Consistency:** Ensure generated images align reasonably with the store's theme (may require prompt engineering).
+
+**Technical Reference: Example `getimg.ai` API Interaction (Bash Script)**
+
+*Note: This script demonstrates the basic API call flow for generating images based on prompts from a JSON file. It serves as a starting point for implementing the backend logic.*
+
+```bash
+#!/bin/bash
+
+# Replace with your actual API key stored securely (e.g., environment variable)
+API_KEY="YOUR_GETIMG_API_KEY_HERE"
+ENDPOINT="https://api.getimg.ai/v1/flux-schnell/text-to-image"
+OUTPUT_DIR="outputs"
+mkdir -p "$OUTPUT_DIR"
+
+INPUT_FILE="$1"
+
+if [[ -z "$INPUT_FILE" ]]; then
+  echo "❌ Usage: ./generate.sh input_prompts.json"
+  exit 1
+fi
+
+if [[ ! -f "$INPUT_FILE" ]]; then
+  echo "❌ File '$INPUT_FILE' does not exist."
+  exit 1
+fi
+
+# Extract base filename without extension to use as prefix
+FILE_PREFIX=$(basename "$INPUT_FILE" .json)
+
+# Simple list of common English stopwords
+STOPWORDS="a|the|with|and|of|to|in|on|for|from|is|as|at|an|by|this|that|be|must|no"
+
+# Read prompts from a JSON array like: [{"prompt": "..."}, ...]
+jq -c '.[]' "$INPUT_FILE" | nl -v 1 | while read -r index line; do
+  prompt=$(echo "$line" | jq -r '.prompt')
+
+  # Generate a simple filename based on keywords (first 6 non-stopwords)
+  keywords=$(echo "$prompt" | \
+    tr 'A-Z' 'a-z' | \
+    tr -cd 'a-z0-9 \n' | \
+    tr ' ' '\n' | \
+    grep -v -E "^($STOPWORDS)$" | \
+    head -n 6 | \
+    paste -sd '-' -)
+
+  # Handle cases with no suitable keywords
+  if [[ -z "$keywords" ]]; then
+      keywords="image"
+  fi
+
+  filename="${FILE_PREFIX}_${index}_${keywords}.png"
+  filepath="$OUTPUT_DIR/$filename"
+
+  echo "⏳ Generating image for prompt ${index}: ${prompt:0:50}..."
+
+  # Make the API call
+  response=$(curl -s --request POST \
+    --url "$ENDPOINT" \
+    --header 'accept: application/json' \
+    --header "authorization: Bearer $API_KEY" \
+    --header 'content-type: application/json' \
+    --data "{\"prompt\": \"$(echo $prompt | sed 's/"/\\"/g')\", \"width\": 1024, \"height\": 1024, \"response_format\": \"url\"}") # Ensure prompt JSON is escaped
+
+  # Extract the image URL (adjust selectors based on actual API response structure)
+  image_url=$(echo "$response" | jq -r '.imageUrl // .url // .images[0].url // empty')
+
+  if [[ -n "$image_url" ]]; then
+    # Download the image
+    curl -s "$image_url" -o "$filepath"
+    if [[ $? -eq 0 ]]; then
+        echo "✅ Saved: $filepath"
+    else
+        echo "❌ Failed to download image for prompt ${index}."
+    fi
+  else
+    echo "⚠️  Failed to get image URL for prompt ${index}: ${prompt:0:50}..."
+    echo "   Response: $response"
+    # Save error response for debugging
+    echo "$response" > "$OUTPUT_DIR/${FILE_PREFIX}_error_${index}.json"
+  fi
+done
+```
+
+### 8.2 Internal Static Image Library Viewer
+
+**Goal:** Provide an internal tool for the development team to easily browse, search, and understand the contents of the static image library (images, descriptions, embeddings stored in `library.json`).
+
+**Features (MVP):**
+- **Location:** A new page within the application, accessible via a dedicated route (e.g., `/dev/image-library`). Access control will be added using the existing authentication mechanism, gating access to authorized users.
+- **UI:** A simple web interface (React component) displaying:
+  - Thumbnails of images from the static library (loaded from Vercel Blob).
+  - The associated description and filename for each image.
+  - A search input bar.
+- **Search:** Basic, case-insensitive text search filtering images based on keywords in their descriptions and/or filenames.
+- **Pagination:** Implement simple pagination for the results if the library contains many images (assume < 10k images for initial design).
+
+**Technical Implementation:**
+- **Backend API Route:** A Next.js API Route (e.g., `app/api/dev/image-library/search/route.ts`) will handle search requests. This is preferred over Server Actions for easier standalone debugging/testing.
+- **Data Loading:**
+  - The API route will load the large static `library.json` file (containing paths, descriptions, filenames, and embeddings).
+  - **Manual Loading & Caching:** Use `fs.readFileSync` within a caching mechanism (e.g., module-level variable) to load the data only once per warm function instance, avoiding re-reads on every request. *(Note: Current assumption is the JSON file is < 100MB. If it grows significantly larger, consider splitting the JSON into metadata and embeddings files, or alternative data storage)*.
+  - The API route filters the loaded data based on the text query parameter.
+  - The API returns only the filtered list of matching image metadata (path/URL, description, filename) to the frontend.
+- **Frontend:**
+  - The React component for the viewer page makes `fetch` requests to the backend API route on search input changes (with debouncing).
+  - Renders the filtered list of images and their details.
+- **Data Freshness:** The viewer will reflect updates to `library.json` only after a full application redeployment.
+
+**Features (Stretch Goals):**
+- **Similarity Search:** Add functionality to search for images based on semantic similarity to a text query. This would require:
+  - Loading the embeddings on the backend.
+  - An endpoint to generate embeddings for user queries (using Vercel AI SDK `embed`).
+  - Calculating cosine similarity and returning ranked results.
+- **Advanced Filtering/Sorting:** Add options to filter by hero image layout convention (`-left.jpg`, `-right.jpg`) or sort results.
+
+**Considerations:**
+- **Performance:** Monitor cold start time and search performance of the API route with the large JSON file. Implement JSON splitting optimization if needed.
+- **UI Scalability:** Ensure the frontend handles rendering potentially large numbers of search results efficiently (pagination helps initially).
+
+---
+
+### 8.3 Implementation Plan (Post-PoC)
+
+This plan outlines the development tasks for the On-Demand Image Generation and Internal Library Viewer features, which can be tackled independently or in parallel.
+
+#### 8.3.1 On-Demand Product Image Generation (getimg.ai)
+- [ ] Add UI toggle/selector on the frontend to choose between "Stock Images" and "Generate New Images".
+- [ ] Implement basic conditional logic shell in `/api/generate` based on the UI selection.
+- [ ] Securely configure `getimg.ai` API key (env var).
+- [ ] Implement the backend logic within `/api/generate` for the "Generate New Images" path:
+  - Extract descriptions from product image placeholders.
+  - Implement parallelized API calls to `getimg.ai` text-to-image endpoint.
+  - Handle `getimg.ai` API responses (success and basic errors).
+- [ ] Implement image download from `getimg.ai` URL.
+- [ ] Set up Vercel Blob storage configuration.
+- [ ] Implement image upload to Vercel Blob, including storing the prompt as metadata.
+- [ ] Inject the final Vercel Blob URL back into the JSON object.
+- [ ] Test the end-to-end flow for on-demand image generation with various prompts.
+- [ ] Refine error handling for `getimg.ai` integration based on testing.
+- [ ] *(Optional)* Implement status streaming for the generation process.
+
+#### 8.3.2 Internal Static Image Library Viewer
+- [ ] Create the backend API route (`app/api/dev/image-library/search/route.ts`) for the library viewer.
+- [ ] Implement manual loading and caching logic for `library.json` within the API route.
+- [ ] Implement basic server-side text filtering (description/filename) in the API route and return filtered results.
+- [ ] Create the frontend page component for the viewer (`/dev/image-library/page.tsx`).
+- [ ] Implement UI elements: search bar, image grid/list display.
+- [ ] Implement frontend logic to call the search API route (with debouncing) and display results.
+- [ ] Implement basic pagination for search results.
+- [ ] Integrate access control using the existing auth mechanism to restrict the page to authorized users.
+- [ ] Test the library viewer functionality and performance.
+- [ ] *(Optional)* Implement similarity search for the library viewer.
+- [ ] *(Optional)* Implement advanced filtering/sorting.
+- [ ] *(Optional)* Consider JSON splitting optimization if `library.json` loading proves too slow/memory-intensive.
