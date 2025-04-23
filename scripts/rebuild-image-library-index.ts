@@ -1,8 +1,9 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import dotenv from 'dotenv';
 import { openai } from '@ai-sdk/openai';
-import { embed, generateObject, EmbeddingModel } from 'ai';
+import { embed, generateObject } from 'ai';
 import { z } from 'zod';
 import cliProgress from 'cli-progress';
 import Table from 'cli-table3';
@@ -19,6 +20,7 @@ const IMAGE_LIBRARY_DIR = path.join(
   'images',
   'library',
 );
+const PUBLIC_DIR = path.join(process.cwd(), 'public');
 const OUTPUT_DATA_FILE = path.join(
   process.cwd(),
   'data',
@@ -71,18 +73,29 @@ const descriptionSchema = z.object({
 // --- Types ---
 interface ImageData {
   path: string; // Relative path from /public
-  url: string; // Added: Public URL from Vercel Blob
+  url: string; // Public URL from Vercel Blob
   description: string;
   shortName: string;
   embedding: number[];
+  hash: string; // SHA256 hash of the image file content
+  blobPathname: string; // Pathname used for Vercel Blob storage
 }
 
 // --- Helper Functions ---
 
 /**
+ * Calculates the SHA256 hash of a buffer.
+ * @param buffer The buffer to hash.
+ * @returns The hex-encoded SHA256 hash.
+ */
+function calculateHash(buffer: Buffer): string {
+  return crypto.createHash('sha256').update(buffer).digest('hex');
+}
+
+/**
  * Finds all image files within a directory.
  * @param dir Path to the directory.
- * @returns A promise that resolves to an array of image file paths.
+ * @returns A promise that resolves to an array of absolute image file paths.
  */
 async function findImageFiles(dir: string): Promise<string[]> {
   try {
@@ -98,7 +111,7 @@ async function findImageFiles(dir: string): Promise<string[]> {
         entry.isFile() &&
         SUPPORTED_EXTENSIONS.includes(path.extname(entry.name).toLowerCase())
       ) {
-        imageFiles.push(fullPath);
+        imageFiles.push(fullPath); // Keep absolute paths for reading
       }
     }
     return imageFiles;
@@ -126,89 +139,78 @@ async function ensureDirectoryExists(filePath: string): Promise<void> {
   }
 }
 
-// --- New function to process a single image ---
-async function processImage(
-  imagePath: string,
-  progressBar: cliProgress.SingleBar,
-): Promise<ImageData> {
-  const filename = path.basename(imagePath);
-  progressBar.update({ filename }); // Update filename immediately
+/**
+ * Processes a single image: reads, uploads to blob, generates description and embedding.
+ * This is called ONLY for new or modified images.
+ * @param imagePath Absolute path to the image file.
+ * @param imageBuffer Buffer containing the image data.
+ * @param currentHash SHA256 hash of the image content.
+ * @param blobPathname The calculated Vercel Blob pathname.
+ * @returns A promise resolving to the processed ImageData (excluding path).
+ */
+async function generateNewImageData(
+  imagePath: string, // Keep for error context
+  imageBuffer: Buffer,
+  currentHash: string,
+  blobPathname: string,
+): Promise<Omit<ImageData, 'path'>> {
+  // --- Vercel Blob Upload ---
+  const blob = await put(blobPathname, imageBuffer, {
+    access: 'public',
+    allowOverwrite: true, // Necessary for updates/moves
+  });
+  const blobUrl = blob.url;
+  // --- End Vercel Blob Upload ---
 
-  try {
-    // Read image file
-    const imageBuffer = await fs.readFile(imagePath);
+  // Generate structured description and shortName
+  const { object: generatedData } = await generateObject({
+    model: DESCRIPTION_MODEL,
+    schema: descriptionSchema,
+    messages: [
+      {
+        role: 'user',
+        content: [
+          { type: 'image', image: imageBuffer },
+          { type: 'text', text: DESCRIPTION_PROMPT },
+        ],
+      },
+    ],
+    maxRetries: MAX_RETRIES,
+    abortSignal: AbortSignal.timeout(API_TIMEOUT_MS),
+  });
 
-    // --- Vercel Blob Upload (Using allowOverwrite) ---
-    const relativeToLibrary = path.relative(IMAGE_LIBRARY_DIR, imagePath);
-    const blobPathname = path.posix.join('library', relativeToLibrary);
-    const blob = await put(blobPathname, imageBuffer, {
-      access: 'public',
-      allowOverwrite: true,
-    });
-    const blobUrl = blob.url;
-    // --- End Vercel Blob Upload ---
-
-    // Generate structured description and shortName
-    const { object: generatedData } = await generateObject({
-      model: DESCRIPTION_MODEL,
-      schema: descriptionSchema,
-      messages: [
-        {
-          role: 'user',
-          content: [
-            { type: 'image', image: imageBuffer },
-            { type: 'text', text: DESCRIPTION_PROMPT },
-          ],
-        },
-      ],
-      maxRetries: MAX_RETRIES,
-      abortSignal: AbortSignal.timeout(API_TIMEOUT_MS),
-    });
-
-    if (
-      !generatedData ||
-      !generatedData.description ||
-      !generatedData.shortName
-    ) {
-      throw new Error(
-        'Failed to generate complete structured data (description/shortName).',
-      );
-    }
-
-    // Generate embedding for the detailed description
-    const { embedding } = await embed({
-      model: EMBEDDING_MODEL,
-      value: generatedData.description,
-      maxRetries: MAX_RETRIES,
-      abortSignal: AbortSignal.timeout(API_TIMEOUT_MS),
-    });
-
-    const relativePath = path.relative(
-      path.join(process.cwd(), 'public'),
-      imagePath,
+  if (
+    !generatedData ||
+    !generatedData.description ||
+    !generatedData.shortName
+  ) {
+    throw new Error(
+      'Failed to generate complete structured data (description/shortName).',
     );
-    return {
-      path: `/${relativePath}`,
-      url: blobUrl,
-      description: generatedData.description,
-      shortName: generatedData.shortName,
-      embedding,
-    };
-  } catch (error) {
-    // Add imagePath to the error for better tracking in the main loop
-    (error as any).imagePath = imagePath;
-    throw error;
-  } finally {
-    progressBar.increment(); // Increment after processing (success or failure)
   }
+
+  // Generate embedding for the detailed description
+  const { embedding } = await embed({
+    model: EMBEDDING_MODEL,
+    value: generatedData.description,
+    maxRetries: MAX_RETRIES,
+    abortSignal: AbortSignal.timeout(API_TIMEOUT_MS),
+  });
+
+  return {
+    url: blobUrl,
+    description: generatedData.description,
+    shortName: generatedData.shortName,
+    embedding,
+    hash: currentHash,
+    blobPathname: blobPathname,
+  };
 }
 
 // --- Main Execution ---
 
 async function main() {
-  console.log(
-    'Starting image description, name, embedding generation, and blob upload...',
-  );
+  console.log('Starting incremental image library processing...');
 
   // 1. Ensure API Keys are set
   if (!process.env.OPENAI_API_KEY) {
@@ -216,108 +218,257 @@ async function main() {
     process.exit(1);
   }
 
-  // 2. Find image files
+  // 2. Load Existing Data (if available)
+  const oldImageDataMap = new Map<string, ImageData>();
+  try {
+    const existingDataJson = await fs.readFile(OUTPUT_DATA_FILE, 'utf-8');
+    const existingDataArray = JSON.parse(existingDataJson) as ImageData[];
+    existingDataArray.forEach((data) => {
+      // Use the relative path from /public as the key
+      const relativePathKey = data.path.startsWith('/')
+        ? data.path.substring(1)
+        : data.path;
+      oldImageDataMap.set(relativePathKey, data);
+    });
+    console.log(`Loaded ${oldImageDataMap.size} existing image records.`);
+  } catch (error: any) {
+    if (error.code === 'ENOENT') {
+      console.log('No existing image library data found. Starting fresh.');
+      await ensureDirectoryExists(OUTPUT_DATA_FILE); // Ensure dir exists even if file doesn't
+    } else {
+      console.error(
+        `Error reading existing data file ${OUTPUT_DATA_FILE}:`,
+        error,
+      );
+      process.exit(1);
+    }
+  }
+
+  // 3. Find current image files
   console.log(`Scanning for images in: ${IMAGE_LIBRARY_DIR}`);
-  const imagePaths = await findImageFiles(IMAGE_LIBRARY_DIR);
-  if (imagePaths.length === 0) {
-    console.log('No image files found. Exiting.');
+  const currentImagePaths = await findImageFiles(IMAGE_LIBRARY_DIR); // Absolute paths
+  if (currentImagePaths.length === 0) {
+    console.log(
+      'No image files found in library directory. Saving empty index.',
+    );
+    await fs.writeFile(OUTPUT_DATA_FILE, JSON.stringify([], null, 2), 'utf-8');
     return;
   }
-  console.log(`Found ${imagePaths.length} images to process.`);
-
-  // 3. Ensure output directory exists
-  await ensureDirectoryExists(OUTPUT_DATA_FILE);
+  console.log(`Found ${currentImagePaths.length} images on disk.`);
 
   // 4. Set up Progress Bar
   console.log('Processing images...');
   const progressBar = new cliProgress.SingleBar(
     {
       format:
-        ' {bar} | {percentage}% | ETA: {eta}s | {value}/{total} | File: {filename}',
+        ' {bar} | {percentage}% | ETA: {eta_formatted} | {value}/{total} | Status: {status} | File: {filename}',
+      etaBuffer: 100, // Smoother ETA
     },
     cliProgress.Presets.shades_classic,
   );
-  progressBar.start(imagePaths.length, 0, { filename: 'N/A' });
+  progressBar.start(currentImagePaths.length, 0, {
+    filename: 'N/A',
+    status: 'Starting...',
+  });
 
   // 5. Process Images Concurrently
-  const results: ImageData[] = [];
-  const errors: { path: string; error: any }[] = [];
-  const limit = pLimit(CONCURRENCY); // Create limiter
+  const newImageDataMap = new Map<string, ImageData>();
+  const errors: { path: string; error: any; reason: string }[] = [];
+  const stats = {
+    processed: 0,
+    reused: 0,
+    moved: 0, // Content same, path changed (blob re-uploaded)
+    errors: 0,
+  };
+  const limit = pLimit(CONCURRENCY);
+  const processedRelativePaths = new Set<string>(); // Track paths found on disk
 
-  const processingPromises = imagePaths.map((imagePath) => {
-    // Wrap the call to processImage with the limiter
-    return limit(() => processImage(imagePath, progressBar));
-  });
+  const processingPromises = currentImagePaths.map((imagePath) =>
+    limit(async () => {
+      const relativeToPublic = path.relative(PUBLIC_DIR, imagePath);
+      const filename = path.basename(imagePath);
+      processedRelativePaths.add(relativeToPublic); // Track this path exists
+      progressBar.update({ filename, status: 'Hashing...' });
 
-  const settledResults = await Promise.allSettled(processingPromises);
+      const existingData = oldImageDataMap.get(relativeToPublic);
 
-  // Process results after all promises have settled
-  settledResults.forEach((result) => {
-    if (result.status === 'fulfilled') {
-      results.push(result.value);
-    } else {
-      // Extract imagePath from the error if available
-      const imagePath = result.reason?.imagePath || 'Unknown path';
-      errors.push({ path: imagePath, error: result.reason });
-    }
-  });
+      try {
+        const imageBuffer = await fs.readFile(imagePath);
+        const currentHash = calculateHash(imageBuffer);
+        const relativeToLibrary = path.relative(IMAGE_LIBRARY_DIR, imagePath);
+        const expectedBlobPathname = path.posix.join(
+          'library',
+          relativeToLibrary,
+        );
+
+        let finalImageData: ImageData;
+
+        if (existingData && existingData.hash === currentHash) {
+          // Content is the same
+          if (existingData.blobPathname === expectedBlobPathname) {
+            // Path is also the same, reuse everything
+            progressBar.update({ status: 'Reused (Unchanged)' });
+            finalImageData = existingData;
+            stats.reused++;
+          } else {
+            // Content same, but path changed (moved/renamed)
+            // Reuse AI data, but re-upload blob to new path
+            progressBar.update({ status: 'Re-uploading (Moved)' });
+            const blob = await put(expectedBlobPathname, imageBuffer, {
+              access: 'public',
+              allowOverwrite: true,
+            });
+            finalImageData = {
+              ...existingData, // Reuse description, shortName, embedding, hash
+              path: `/${relativeToPublic}`, // Update relative path from /public
+              url: blob.url, // Update blob URL
+              blobPathname: expectedBlobPathname, // Update blob pathname
+            };
+            stats.moved++;
+          }
+        } else {
+          // New image or content modified
+          progressBar.update({ status: 'Generating AI Data...' });
+          const newData = await generateNewImageData(
+            imagePath,
+            imageBuffer,
+            currentHash,
+            expectedBlobPathname,
+          );
+          finalImageData = {
+            path: `/${relativeToPublic}`, // Relative path from /public
+            ...newData,
+          };
+          stats.processed++;
+        }
+
+        newImageDataMap.set(relativeToPublic, finalImageData);
+      } catch (error: any) {
+        errors.push({
+          path: imagePath,
+          error,
+          reason: existingData
+            ? 'Error processing modified/moved image'
+            : 'Error processing new image',
+        });
+        stats.errors++;
+      } finally {
+        progressBar.increment();
+      }
+    }),
+  );
+
+  await Promise.allSettled(processingPromises); // Wait for all concurrent tasks
 
   progressBar.stop();
 
-  // 6. Report errors
+  // 6. Identify and Handle Deletions
+  const deletedPaths: string[] = [];
+  oldImageDataMap.forEach((_, relativePathKey) => {
+    if (!processedRelativePaths.has(relativePathKey)) {
+      deletedPaths.push(relativePathKey);
+      // No need to remove from Vercel Blob for this script
+    }
+  });
+  if (deletedPaths.length > 0) {
+    console.log(
+      `\nDetected ${deletedPaths.length} images removed from the library directory.`,
+    );
+    // These are implicitly removed as they are not added to newImageDataMap
+  }
+  stats.errors += errors.length; // Update total errors
+
+  // 7. Report Summary
+  console.log('\n--- Processing Summary ---');
+  console.log(`Total images found on disk: ${currentImagePaths.length}`);
+  console.log(`  - Reused (unchanged):     ${stats.reused}`);
+  console.log(`  - Updated (moved/renamed): ${stats.moved}`);
+  console.log(`  - Newly processed:        ${stats.processed}`);
+  console.log(`  - Images deleted:         ${deletedPaths.length}`);
+  console.log(`  - Errors:                 ${stats.errors}`);
+  console.log(`--------------------------`);
+  console.log(`Total records in new index: ${newImageDataMap.size}`);
+
+  // 8. Report errors
   if (errors.length > 0) {
-    console.warn(`
-\nEncountered errors processing ${errors.length} images:`);
+    console.warn(`\nEncountered errors processing ${errors.length} images:`);
+    // Sort errors by filename for readability
+    errors.sort((a, b) =>
+      path.basename(a.path).localeCompare(path.basename(b.path)),
+    );
     errors.forEach((err) => {
       console.warn(
-        `- ${path.basename(err.path)}: ${err.error?.message || 'Unknown error'}`,
+        `- ${path.basename(err.path)}: ${err.reason} - ${err.error?.message || 'Unknown error'}`,
       );
+      // Optional: Log full error stack for debugging
+      // console.error(err.error);
     });
   }
 
-  // --- Print Summary Table ---
-  if (results.length > 0) {
-    console.log('\n--- Generated Content Summary ---');
+  // Convert Map to Array for saving
+  const finalResultsArray = Array.from(newImageDataMap.values());
+  // Sort final array by path for consistent output
+  finalResultsArray.sort((a, b) => a.path.localeCompare(b.path));
+
+  // --- Print Summary Table (Optional - can be large) ---
+  if (finalResultsArray.length > 0 && finalResultsArray.length < 50) {
+    // Limit table size
+    console.log('\n--- Generated Content Summary (Sample) ---');
     const table = new Table({
-      head: ['Filename', 'Short Name', 'Description', 'Blob URL'],
-      colWidths: [30, 25, 50, 40],
+      head: ['Path', 'Short Name', 'Description', 'Blob URL', 'Hash (start)'],
+      colWidths: [30, 25, 40, 35, 15],
       wordWrap: true,
       style: { head: ['cyan'] },
     });
 
-    results.forEach((result) => {
+    finalResultsArray.forEach((result) => {
       table.push([
-        path.basename(result.path),
+        result.path,
         result.shortName,
-        result.description,
+        result.description.substring(0, 100) +
+          (result.description.length > 100 ? '...' : ''), // Truncate desc
         result.url,
+        result.hash.substring(0, 8), // Show start of hash
       ]);
     });
-
     console.log(table.toString());
+  } else if (finalResultsArray.length >= 50) {
+    console.log('\nSkipping summary table due to large number of images.');
   }
   // --- End Summary Table ---
 
-  // 7. Write results to JSON file
-  if (results.length > 0) {
+  // 9. Write results to JSON file
+  if (
+    finalResultsArray.length > 0 ||
+    deletedPaths.length > 0 ||
+    oldImageDataMap.size === 0
+  ) {
+    // Write even if empty now, to record deletions
     try {
-      const jsonData = JSON.stringify(results, null, 2);
+      const jsonData = JSON.stringify(finalResultsArray, null, 2);
       await fs.writeFile(OUTPUT_DATA_FILE, jsonData, 'utf-8');
       console.log(`
-Successfully generated data and uploaded ${results.length} images to Vercel Blob.`);
+Successfully updated image library index.`);
       console.log(`Data saved to: ${OUTPUT_DATA_FILE}`);
     } catch (error) {
       console.error(`\nError writing data to ${OUTPUT_DATA_FILE}:`, error);
-      process.exit(1);
+      process.exit(1); // Exit if final save fails
     }
-  } else {
+  } else if (stats.errors === 0) {
     console.log(
-      '\nNo image data was successfully generated. Output file not written.',
+      '\nNo changes detected and no errors. Output file remains unchanged.',
     );
+  } else {
+    console.log('\nNo data generated due to errors. Output file not written.');
+  }
+
+  if (stats.errors > 0) {
+    console.error(`\nScript finished with ${stats.errors} errors.`);
+    process.exit(1); // Exit with error code if any errors occurred
   }
 }
 
 main().catch((error) => {
-  console.error('\nScript failed:', error);
+  console.error('\nScript failed unexpectedly:', error);
   process.exit(1);
 });
