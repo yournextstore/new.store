@@ -459,7 +459,7 @@ export async function POST(req: Request) {
       );
     }
     if (!process.env.NEXT_PUBLIC_YNS_API_URL) {
-      console.error('YNS_API_URL environment variable is not set.');
+      console.error('NEXT_PUBLIC_YNS_API_URL environment variable is not set.');
       return NextResponse.json(
         { error: 'Internal Server Error: YNS API URL configuration missing.' },
         { status: 500 },
