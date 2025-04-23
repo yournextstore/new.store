@@ -282,6 +282,7 @@ async function main() {
   };
   const limit = pLimit(CONCURRENCY);
   const processedRelativePaths = new Set<string>(); // Track paths found on disk
+  const changedRelativePaths = new Set<string>(); // Track paths that were processed or moved
 
   const processingPromises = currentImagePaths.map((imagePath) =>
     limit(async () => {
@@ -290,9 +291,11 @@ async function main() {
       processedRelativePaths.add(relativeToPublic); // Track this path exists
       progressBar.update({ filename, status: 'Hashing...' });
 
-      const existingData = oldImageDataMap.get(relativeToPublic);
-
+      // Declare existingData in the outer scope of the async function
+      let existingData: ImageData | undefined;
       try {
+        existingData = oldImageDataMap.get(relativeToPublic); // Assign here
+
         const imageBuffer = await fs.readFile(imagePath);
         const currentHash = calculateHash(imageBuffer);
         const relativeToLibrary = path.relative(IMAGE_LIBRARY_DIR, imagePath);
@@ -325,6 +328,7 @@ async function main() {
               blobPathname: expectedBlobPathname, // Update blob pathname
             };
             stats.moved++;
+            changedRelativePaths.add(relativeToPublic); // Mark as changed
           }
         } else {
           // New image or content modified
@@ -340,6 +344,7 @@ async function main() {
             ...newData,
           };
           stats.processed++;
+          changedRelativePaths.add(relativeToPublic); // Mark as changed
         }
 
         newImageDataMap.set(relativeToPublic, finalImageData);
@@ -347,11 +352,21 @@ async function main() {
         errors.push({
           path: imagePath,
           error,
+          // Use the existingData declared outside the try block
           reason: existingData
             ? 'Error processing modified/moved image'
             : 'Error processing new image',
         });
         stats.errors++;
+        // Ensure path is added even on error if it was intended to be processed
+        if (
+          existingData &&
+          existingData.hash !== calculateHash(await fs.readFile(imagePath))
+        ) {
+          changedRelativePaths.add(relativeToPublic); // Mark as changed if content differs
+        } else if (!existingData) {
+          changedRelativePaths.add(relativeToPublic); // Mark as changed if new
+        }
       } finally {
         progressBar.increment();
       }
@@ -410,18 +425,33 @@ async function main() {
   // Sort final array by path for consistent output
   finalResultsArray.sort((a, b) => a.path.localeCompare(b.path));
 
-  // --- Print Summary Table (Optional - can be large) ---
-  if (finalResultsArray.length > 0 && finalResultsArray.length < 50) {
-    // Limit table size
-    console.log('\n--- Generated Content Summary (Sample) ---');
+  // Filter for changed items to display in the table
+  const changedResultsArray = finalResultsArray.filter(
+    (result) => changedRelativePaths.has(result.path.substring(1)), // Check against tracked changed paths
+  );
+
+  // --- Print Summary Table for Changed Items (Optional - can be large) ---
+  if (changedResultsArray.length > 0 && changedResultsArray.length < 50) {
+    // Limit table size for changed items
+    console.log('\n--- Updated/Added Content Summary ---'); // Updated title
     const table = new Table({
-      head: ['Path', 'Short Name', 'Description', 'Blob URL', 'Hash (start)'],
-      colWidths: [30, 25, 40, 35, 15],
+      head: [
+        'Path',
+        'Short Name',
+        'Description',
+        'Blob URL',
+        'Hash (start)',
+        'Status',
+      ], // Added Status column
+      colWidths: [30, 25, 40, 35, 15, 10], // Adjusted widths
       wordWrap: true,
       style: { head: ['cyan'] },
     });
 
-    finalResultsArray.forEach((result) => {
+    changedResultsArray.forEach((result) => {
+      const status = oldImageDataMap.has(result.path.substring(1))
+        ? 'Updated'
+        : 'Added'; // Determine status
       table.push([
         result.path,
         result.shortName,
@@ -429,11 +459,16 @@ async function main() {
           (result.description.length > 100 ? '...' : ''), // Truncate desc
         result.url,
         result.hash.substring(0, 8), // Show start of hash
+        status, // Show if added or updated
       ]);
     });
     console.log(table.toString());
-  } else if (finalResultsArray.length >= 50) {
-    console.log('\nSkipping summary table due to large number of images.');
+  } else if (changedResultsArray.length >= 50) {
+    console.log(
+      `\nSkipping summary table for ${changedResultsArray.length} updated/added items.`,
+    );
+  } else if (stats.processed === 0 && stats.moved === 0 && stats.errors === 0) {
+    console.log('\nNo images were added or updated.');
   }
   // --- End Summary Table ---
 
