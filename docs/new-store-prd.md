@@ -537,17 +537,58 @@ This prompt has several simplifications (e.g. the hardcoded logo/ogimage URLs) t
 
 ## 8. Post-PoC Feature Development
 
-With the successful completion of the initial 10-day PoC (Proof of Concept), the following features are planned for the next phase of development.
+With the successful completion of the initial 10-day PoC (Proof of Concept), the following features are planned for the next phase of development. These features build upon the PoC infrastructure and address key areas for improvement and expansion.
 
-### 8.1 On-Demand Product Image Generation (getimg.ai)
+### 8.1 Image Library Migration to PostgreSQL/pgvector
 
-**Goal:** Provide users the option to generate unique product images on-demand using a text-to-image service (`getimg.ai`), instead of relying solely on the static image library.
+**Goal:** Migrate the image library storage from the static `library.json` file and in-memory search to a persistent PostgreSQL database using the `pgvector` extension. This provides scalability and enables real-time updates necessary for integrating newly generated images.
+
+**Rationale:**
+- The static JSON approach, while sufficient for the PoC, does not allow for dynamic additions to the image library (e.g., saving user-generated images via `getimg.ai`).
+- A database solution provides a robust and scalable foundation for managing a growing image library.
+- `pgvector` enables efficient vector similarity searches directly within the database, replacing the in-memory search logic.
+
+**Technical Implementation:**
+- **Database Setup:**
+  - Provision a PostgreSQL database instance using Neon ([https://neon.tech](https://neon.tech)).
+  - Enable the `pgvector` extension within the Neon database.
+  - Define a database schema (e.g., a table named `images`) including columns for:
+    - `id` (Primary Key)
+    - `blob_url` (TEXT, URL to the image file in Vercel Blob)
+    - `description` (TEXT)
+    - `embedding` (VECTOR, using the dimension required by `text-embedding-3-small`)
+    - `filename` (TEXT, optional, for potential debugging/metadata)
+    - `layout_hint` (TEXT, nullable, e.g., 'left', 'right' for hero images based on filename convention)
+    - `source` (TEXT, e.g., 'static', 'generated')
+    - `created_at` (TIMESTAMP)
+- **Data Migration Script:**
+  - Develop a one-time script to:
+    - Read the existing image metadata (descriptions, filenames, potentially pre-computed embeddings) from the source (`library.json` or original image files/descriptions).
+    - Connect to the Neon database.
+    - Insert the static library image data into the new `images` table, populating all relevant fields, including generating embeddings if necessary using `text-embedding-3-small`.
+- **Backend Logic Update:**
+  - Refactor the backend API route (`/api/generate`) responsible for image selection (Sections 4.2.1 & 4.2.2).
+  - Replace the `library.json` loading and in-memory search logic with database operations:
+    - Use a PostgreSQL client library (e.g., `node-postgres`/`pg`, **no ORM** will be introduced initially) to connect to the Neon database.
+    - Generate an embedding for the incoming description from the image placeholder URL (`https://yns.img?description=...`).
+    - Execute a SQL query using `pgvector` operators (e.g., `<=>` for cosine similarity) to find the most similar image embeddings in the `images` table.
+    - Apply necessary filtering (e.g., `layout_hint` based on `boxAlignment` for hero images).
+    - Retrieve the `blob_url` of the best-matching image.
+- **Environment Configuration:**
+  - Add database connection string and credentials as secure environment variables (e.g., `POSTGRES_URL`).
+
+**Considerations:**
+- Ensure appropriate indexing (e.g., HNSW index on the `embedding` column) is created in PostgreSQL for efficient vector search performance.
+
+### 8.2 On-Demand Product Image Generation (getimg.ai)
+
+**Goal:** Provide users the option to generate unique product images on-demand using a text-to-image service (`getimg.ai`), instead of relying solely on the image library. Generated images will be added to the persistent library.
 
 **User Flow & Experience:**
 - A toggle or selection mechanism will be added to the UI allowing users to choose between:
   - "Use Stock Images" (current behavior: static library lookup via vector search).
   - "Generate New Images" (new behavior: `getimg.ai` generation).
-- Image generation applies **only to product images** (`products[].imageUrl`). Hero images, logos, section images, etc., will continue to use the existing static library lookup or placeholder mechanisms described in the PoC.
+- Image generation applies **only to product images** (`products[].imageUrl`). Hero images, logos, section images, etc., will continue to use the existing placeholder and **database** lookup mechanisms.
 - The store generation process will **block** UI interaction until both JSON generation and product image generation (if selected) are complete. Latency will increase compared to the static library path.
 - **No user controls** for re-generating images or modifying prompts are planned for the initial version (KISS principle).
 - Basic error handling will be implemented (e.g., displaying a message if `getimg.ai` fails).
@@ -565,8 +606,9 @@ With the successful completion of the initial 10-day PoC (Proof of Concept), the
     - Download the generated image from the `getimg.ai` URL.
     - Upload the downloaded image to Vercel Blob storage (e.g., under `/images/generated/<unique_id>.png`).
     - Store the original generation `description` (prompt) as metadata associated with the image file in Vercel Blob.
+    - **Persist Generated Image:** Insert the details of the newly generated image into the **PostgreSQL `images` table**, including its Vercel Blob URL, the original description, its generated embedding (using `text-embedding-3-small`), and setting the `source` to 'generated'.
     - Replace the original placeholder URL in the JSON with the new Vercel Blob URL for the generated image.
-- **Static Library Path:** If "Use Stock Images" is selected, the existing logic (vector search on static library based on placeholder description) remains unchanged.
+- **Library Lookup Path:** If "Use Stock Images" is selected, the **database lookup logic** (vector search on the `images` table based on placeholder description, as defined in Section 8.1) is used.
 - **Final JSON:** The finalized JSON (with either static or generated product image URLs) is sent to the Your Next Store API.
 - **Security & Cost:** The `getimg.ai` API key will be stored securely (env vars). Basic rate limiting or usage caps will be configured on the `getimg.ai` service side to manage costs.
 
@@ -575,6 +617,7 @@ With the successful completion of the initial 10-day PoC (Proof of Concept), the
 - **Error Handling:** Define robust handling for `getimg.ai` API errors and upload failures.
 - **Latency:** Parallelizing calls is crucial to manage the added latency.
 - **Stylistic Consistency:** Ensure generated images align reasonably with the store's theme (may require prompt engineering).
+- **Embedding Consistency:** Ensure embeddings generated for new images use the same model (`text-embedding-3-small`) and process as those for the initial static library migration.
 
 **Technical Reference: Example `getimg.ai` API Interaction (Bash Script)**
 
@@ -658,50 +701,57 @@ jq -c '.[]' "$INPUT_FILE" | nl -v 1 | while read -r index line; do
 done
 ```
 
-### 8.2 Internal Static Image Library Viewer
+### 8.3 Internal Image Library Viewer
 
-**Goal:** Provide an internal tool for the development team to easily browse, search, and understand the contents of the static image library (images, descriptions, embeddings stored in `library.json`).
+**Goal:** Provide an internal tool for the development team to easily browse, search, and understand the contents of the **image library stored in the PostgreSQL database and Vercel Blob storage**.
 
 **Features (MVP):**
 - **Location:** A new page within the application, accessible via a dedicated route (e.g., `/dev/image-library`). Access control will be added using the existing authentication mechanism, gating access to authorized users.
 - **UI:** A simple web interface (React component) displaying:
-  - Thumbnails of images from the static library (loaded from Vercel Blob).
-  - The associated description and filename for each image.
-  - A search input bar.
-- **Search:** Basic, case-insensitive text search filtering images based on keywords in their descriptions and/or filenames.
-- **Pagination:** Implement simple pagination for the results if the library contains many images (assume < 10k images for initial design).
+  - Thumbnails of images from the **database** (loaded from Vercel Blob URLs stored in the DB).
+  - The associated description, filename, source, and other relevant metadata for each image.
+- **Search:** Basic, case-insensitive text search filtering images based on keywords in their **descriptions and/or filenames stored in the database**.
+- **Pagination:** Implement simple pagination for the results, querying the database with appropriate LIMIT/OFFSET clauses.
 
 **Technical Implementation:**
 - **Backend API Route:** A Next.js API Route (e.g., `app/api/dev/image-library/search/route.ts`) will handle search requests. This is preferred over Server Actions for easier standalone debugging/testing.
 - **Data Loading:**
-  - The API route will load the large static `library.json` file (containing paths, descriptions, filenames, and embeddings).
-  - **Manual Loading & Caching:** Use `fs.readFileSync` within a caching mechanism (e.g., module-level variable) to load the data only once per warm function instance, avoiding re-reads on every request. *(Note: Current assumption is the JSON file is < 100MB. If it grows significantly larger, consider splitting the JSON into metadata and embeddings files, or alternative data storage)*.
-  - The API route filters the loaded data based on the text query parameter.
-  - The API returns only the filtered list of matching image metadata (path/URL, description, filename) to the frontend.
+  - The API route will connect to the **Neon PostgreSQL database**.
+  - It will query the `images` table based on the text query parameter (using `ILIKE` for case-insensitive text search) and pagination parameters (LIMIT/OFFSET).
+  - The API returns the filtered list of matching image metadata (Blob URL, description, filename, etc.) to the frontend. No large static file loading is required.
 - **Frontend:**
-  - The React component for the viewer page makes `fetch` requests to the backend API route on search input changes (with debouncing).
-  - Renders the filtered list of images and their details.
-- **Data Freshness:** The viewer will reflect updates to `library.json` only after a full application redeployment.
+  - The React component for the viewer page makes `fetch` requests to the backend API route on search input changes (with debouncing) and for pagination.
+  - Renders the list of images and their details fetched from the API.
+- **Data Freshness:** The viewer will reflect the current state of the `images` table in the database relatively close to real-time (depending on caching strategies, if any are added later).
 
 **Features (Stretch Goals):**
 - **Similarity Search:** Add functionality to search for images based on semantic similarity to a text query. This would require:
-  - Loading the embeddings on the backend.
-  - An endpoint to generate embeddings for user queries (using Vercel AI SDK `embed`).
-  - Calculating cosine similarity and returning ranked results.
-- **Advanced Filtering/Sorting:** Add options to filter by hero image layout convention (`-left.jpg`, `-right.jpg`) or sort results.
+  - Generating an embedding for the user's query (using Vercel AI SDK `embed`).
+  - Performing a `pgvector` similarity search against the `embedding` column in the `images` table.
+- **Advanced Filtering/Sorting:** Add options to filter by `source` ('static'/'generated'), `layout_hint`, or sort results by `created_at`, etc., by adding corresponding query parameters and `WHERE`/`ORDER BY` clauses to the backend SQL.
 
 **Considerations:**
-- **Performance:** Monitor cold start time and search performance of the API route with the large JSON file. Implement JSON splitting optimization if needed.
+- **Database Performance:** Monitor query performance, especially for text searches and potential similarity searches. Ensure appropriate database indexes are in place (standard indexes for text columns, HNSW for vector column).
 - **UI Scalability:** Ensure the frontend handles rendering potentially large numbers of search results efficiently (pagination helps initially).
 
 ---
 
-### 8.3 Implementation Plan (Post-PoC)
+### 8.4 Implementation Plan (Post-PoC)
 
-This plan outlines the development tasks for the On-Demand Image Generation and Internal Library Viewer features, which can be tackled independently or in parallel.
+This plan outlines the development tasks for the Database Migration, On-Demand Image Generation, and Internal Library Viewer features. The migration is a prerequisite for the other two.
 
-#### 8.3.1 On-Demand Product Image Generation (getimg.ai)
-- [ ] Add UI toggle/selector on the frontend to choose between "Stock Images" and "Generate New Images".
+#### 8.4.1 Image Library Migration to PostgreSQL/pgvector
+- [ ] Provision Neon PostgreSQL database and enable `pgvector`.
+- [ ] Define and create the `images` table schema.
+- [ ] Add database connection details to environment variables.
+- [ ] Develop and run the one-time data migration script to populate the `images` table from `library.json` / static sources.
+- [ ] Refactor the `/api/generate` route's image selection logic to query the database using `node-postgres` and `pgvector` instead of loading `library.json`.
+- [ ] Test the existing image selection flow thoroughly to ensure it works correctly with the database backend.
+- [ ] Create necessary database indexes (e.g., HNSW on embeddings).
+
+#### 8.4.2 On-Demand Product Image Generation (getimg.ai)
+- [ ] *(Prerequisite: 8.4.1 Complete)*
+- [ ] Add UI toggle/selector on the frontend to choose between "Stock Images" (DB Lookup) and "Generate New Images".
 - [ ] Implement basic conditional logic shell in `/api/generate` based on the UI selection.
 - [ ] Securely configure `getimg.ai` API key (env var).
 - [ ] Implement the backend logic within `/api/generate` for the "Generate New Images" path:
@@ -709,23 +759,22 @@ This plan outlines the development tasks for the On-Demand Image Generation and 
   - Implement parallelized API calls to `getimg.ai` text-to-image endpoint.
   - Handle `getimg.ai` API responses (success and basic errors).
 - [ ] Implement image download from `getimg.ai` URL.
-- [ ] Set up Vercel Blob storage configuration.
 - [ ] Implement image upload to Vercel Blob, including storing the prompt as metadata.
-- [ ] Inject the final Vercel Blob URL back into the JSON object.
-- [ ] Test the end-to-end flow for on-demand image generation with various prompts.
-- [ ] Refine error handling for `getimg.ai` integration based on testing.
+- [ ] **Implement logic to generate embedding and insert the new image record (Blob URL, description, embedding, source='generated') into the PostgreSQL `images` table.**
+- [ ] Test the end-to-end flow for on-demand image generation with various prompts, verifying database insertion.
+- [ ] Refine error handling for `getimg.ai` integration and database insertion based on testing.
 - [ ] *(Optional)* Implement status streaming for the generation process.
 
-#### 8.3.2 Internal Static Image Library Viewer
-- [ ] Create the backend API route (`app/api/dev/image-library/search/route.ts`) for the library viewer.
-- [ ] Implement manual loading and caching logic for `library.json` within the API route.
-- [ ] Implement basic server-side text filtering (description/filename) in the API route and return filtered results.
+#### 8.4.3 Internal Image Library Viewer
+- [ ] *(Prerequisite: 8.4.1 Complete)*
+- [ ] Create the backend API route (`app/api/dev/image-library/search/route.ts`).
+- [ ] Implement database connection logic in the API route.
+- [ ] Implement API logic to query the `images` table based on text search and pagination parameters.
 - [ ] Create the frontend page component for the viewer (`/dev/image-library/page.tsx`).
-- [ ] Implement UI elements: search bar, image grid/list display.
+- [ ] Implement UI elements: search bar, image grid/list display, pagination controls.
 - [ ] Implement frontend logic to call the search API route (with debouncing) and display results.
-- [ ] Implement basic pagination for search results.
+- [ ] Implement pagination logic on the frontend.
 - [ ] Integrate access control using the existing auth mechanism to restrict the page to authorized users.
-- [ ] Test the library viewer functionality and performance.
+- [ ] Test the library viewer functionality, including search and pagination, verifying it correctly displays data from the database (both static and potentially generated images if 8.4.2 is also complete).
 - [ ] *(Optional)* Implement similarity search for the library viewer.
 - [ ] *(Optional)* Implement advanced filtering/sorting.
-- [ ] *(Optional)* Consider JSON splitting optimization if `library.json` loading proves too slow/memory-intensive.
