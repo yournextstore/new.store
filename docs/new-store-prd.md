@@ -552,20 +552,32 @@ With the successful completion of the initial 10-day PoC (Proof of Concept), the
 - **Database Setup:**
   - Provision a PostgreSQL database instance using Neon ([https://neon.tech](https://neon.tech)).
   - Enable the `pgvector` extension within the Neon database.
-  - Define a database schema (e.g., a table named `images`) including columns for:
-    - `id` (Primary Key)
-    - `blob_url` (TEXT, URL to the image file in Vercel Blob)
-    - `description` (TEXT)
-    - `embedding` (VECTOR, using the dimension required by `text-embedding-3-small`)
-    - `filename` (TEXT, optional, for potential debugging/metadata)
-    - `layout_hint` (TEXT, nullable, e.g., 'left', 'right' for hero images based on filename convention)
-    - `source` (TEXT, e.g., 'static', 'generated')
-    - `created_at` (TIMESTAMP)
+  - Define a database schema for a unified `images` table. A single table approach is chosen for simplicity in querying and application logic, accommodating different image types (product, hero, etc.) within one structure. Specific metadata like layout hints will be stored in nullable columns. The schema includes:
+    - `id` (UUID, Primary Key, default `gen_random_uuid()`): Unique identifier.
+    - `blob_url` (TEXT NOT NULL): URL to the image file in Vercel Blob.
+    - `description` (TEXT NOT NULL): Textual description/prompt.
+    - `embedding` (VECTOR(1536) NOT NULL): Embedding vector from `text-embedding-3-small`.
+    - `hash` (TEXT NOT NULL): SHA256 hash of the image file content, used for incremental updates.
+    - `filename` (TEXT, nullable): Original filename for reference.
+    - `blob_pathname` (TEXT NOT NULL): The storage path used within Vercel Blob.
+    - `layout_hint` (TEXT, nullable, CHECK (`left`, `right`, `center`)): Layout suitability hint, primarily for hero images.
+    - `source` (TEXT NOT NULL): Origin ('static' or generation service name like 'getimg.ai').
+    - `created_at` (TIMESTAMP WITH TIME ZONE NOT NULL, default `CURRENT_TIMESTAMP`): Creation timestamp.
 - **Data Migration Script:**
-  - Develop a one-time script to:
+  - Develop a one-time script **adapted from `scripts/rebuild-image-library-index.ts`** to:
+    - **Retain the core incremental processing logic:** Connect to the database to load existing image records (including `hash` and `blob_pathname`). Scan the local image directory, calculate hashes, and compare against stored data.
+    - Only perform Vercel Blob uploads, AI description/embedding generation, and database operations (`INSERT`, `UPDATE`, `DELETE`) for new, modified, moved, or deleted images.
     - Read the existing image metadata (descriptions, filenames, potentially pre-computed embeddings) from the source (`library.json` or original image files/descriptions).
     - Connect to the Neon database.
-    - Insert the static library image data into the new `images` table, populating all relevant fields, including generating embeddings if necessary using `text-embedding-3-small`.
+    - Insert the static library image data into the new `images` table, populating all relevant fields, including generating embeddings if necessary using `text-embedding-3-small`. Ensure `source` is set to 'static'.
+  - **Image Library Synchronization Script (`scripts/rebuild-image-library-index.ts`):**
+    - Modify the existing script (`scripts/rebuild-image-library-index.ts`) to interact with the PostgreSQL database instead of the `data/lib/image-library.json` file.
+    - **Retain Incremental Logic:** The script must continue to use its incremental processing capabilities. It should:
+      - Connect to the database to load existing image records (including `hash` and `blob_pathname`).
+      - Scan the local image directory (`public/images/library`), calculate hashes for each file.
+      - Compare local files/hashes against database records to identify new, modified, moved, or deleted images.
+      - Only perform Vercel Blob uploads, AI description/embedding generation, and database operations (`INSERT`, `UPDATE`, `DELETE`) for the identified changes.
+    - **Initial Run:** The first execution of this modified script will serve as the one-time data migration, populating the `images` table from the local file system and setting `source` to 'static' for these initial records.
 - **Backend Logic Update:**
   - Refactor the backend API route (`/api/generate`) responsible for image selection (Sections 4.2.1 & 4.2.2).
   - Replace the `library.json` loading and in-memory search logic with database operations:
@@ -742,9 +754,10 @@ This plan outlines the development tasks for the Database Migration, On-Demand I
 
 #### 8.4.1 Image Library Migration to PostgreSQL/pgvector
 - [x] Provision Neon PostgreSQL database and enable `pgvector`.
-- [ ] Define and create the `images` table schema.
+- [x] Define and create the `images` table schema.
 - [x] Add database connection details to environment variables.
-- [ ] Develop and run the one-time data migration script to populate the `images` table from `library.json` / static sources.
+- [ ] Modify `scripts/rebuild-image-library-index.ts` to interact with the PostgreSQL database instead of `image-library.json`, preserving incremental logic (hash comparison, etc.).
+- [ ] Run the modified `scripts/rebuild-image-library-index.ts` script for the initial data migration, populating the `images` table from the current local library.
 - [ ] Refactor the `/api/generate` route's image selection logic to query the database using `node-postgres` and `pgvector` instead of loading `library.json`.
 - [ ] Test the existing image selection flow thoroughly to ensure it works correctly with the database backend.
 - [ ] Create necessary database indexes (e.g., HNSW on embeddings).

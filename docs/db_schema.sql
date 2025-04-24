@@ -1,0 +1,31 @@
+-- Optional: Enable UUID generation functions if not already enabled
+-- CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+CREATE TABLE images (
+    -- Use gen_random_uuid() available in modern PostgreSQL/Neon
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    blob_url TEXT NOT NULL,
+    description TEXT NOT NULL,
+    -- Dimension for text-embedding-3-small (1536)
+    embedding VECTOR(1536) NOT NULL,
+    hash TEXT NOT NULL, -- SHA256 hash of the image content
+    filename TEXT, -- Optional: original filename for reference
+    blob_pathname TEXT NOT NULL, -- Pathname used in Vercel Blob
+    -- Specific to certain image types (e.g., hero images), NULL otherwise
+    layout_hint TEXT CHECK (layout_hint IN ('left', 'right', 'center')),
+    -- 'static' or the name of the generation service (e.g., 'getimg.ai')
+    source TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+-- Index for efficient vector similarity search (HNSW is generally recommended)
+CREATE INDEX ON images USING hnsw (embedding vector_cosine_ops);
+
+-- Optional: Index for filtering by layout_hint (useful for hero image selection)
+-- CREATE INDEX ON images (layout_hint) WHERE layout_hint IS NOT NULL;
+
+-- Optional: Index for filtering by source
+-- CREATE INDEX ON images (source);
+
+-- Optional: Standard index for potential text searches on description
+-- CREATE INDEX ON images USING gin (description gin_trgm_ops); 
