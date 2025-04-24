@@ -61,6 +61,7 @@
     "orderedmap": "^2.1.1",
     "p-limit": "^6.2.0",
     "papaparse": "^5.5.2",
+    "pg": "^8.15.5",
     "postgres": "^3.4.4",
     "prosemirror-example-setup": "^1.2.3",
     "prosemirror-inputrules": "^1.4.0",
