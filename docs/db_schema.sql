@@ -10,6 +10,7 @@ CREATE TABLE images (
     embedding VECTOR(1536) NOT NULL,
     hash TEXT NOT NULL, -- SHA256 hash of the image content
     filename TEXT, -- Optional: original filename for reference
+    shortName TEXT, -- Optional: short AI-generated name
     blob_pathname TEXT NOT NULL, -- Pathname used in Vercel Blob
     -- Specific to certain image types (e.g., hero images), NULL otherwise
     layout_hint TEXT CHECK (layout_hint IN ('left', 'right', 'center')),
