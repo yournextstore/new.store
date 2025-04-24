@@ -741,9 +741,9 @@ done
 This plan outlines the development tasks for the Database Migration, On-Demand Image Generation, and Internal Library Viewer features. The migration is a prerequisite for the other two.
 
 #### 8.4.1 Image Library Migration to PostgreSQL/pgvector
-- [ ] Provision Neon PostgreSQL database and enable `pgvector`.
+- [x] Provision Neon PostgreSQL database and enable `pgvector`.
 - [ ] Define and create the `images` table schema.
-- [ ] Add database connection details to environment variables.
+- [x] Add database connection details to environment variables.
 - [ ] Develop and run the one-time data migration script to populate the `images` table from `library.json` / static sources.
 - [ ] Refactor the `/api/generate` route's image selection logic to query the database using `node-postgres` and `pgvector` instead of loading `library.json`.
 - [ ] Test the existing image selection flow thoroughly to ensure it works correctly with the database backend.
