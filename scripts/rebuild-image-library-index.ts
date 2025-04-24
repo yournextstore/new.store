@@ -9,9 +9,38 @@ import cliProgress from 'cli-progress';
 import Table from 'cli-table3';
 import { put } from '@vercel/blob';
 import pLimit from 'p-limit';
+import pg, { Pool } from 'pg';
+import type { PoolClient } from 'pg';
 
 // Load environment variables from .env file
 dotenv.config();
+
+// --- Database Connection ---
+// Ensure process.env.POSTGRES_URL is defined using a type assertion
+// or handle the case where it might be undefined more gracefully if necessary.
+if (!process.env.POSTGRES_URL) {
+  console.error('Error: POSTGRES_URL environment variable is not set.');
+  process.exit(1);
+}
+const pool = new Pool({
+  connectionString: process.env.POSTGRES_URL,
+  // Consider adding SSL configuration if required for Neon/production
+  // ssl: { rejectUnauthorized: false }, // Example for simple SSL
+});
+
+// Test the connection
+pool.connect((err, client, release) => {
+  if (err) {
+    return console.error('Error acquiring client', err.stack);
+  }
+  client?.query('SELECT NOW()', (err, result) => {
+    release();
+    if (err) {
+      return console.error('Error executing query', err.stack);
+    }
+    console.log('Successfully connected to PostgreSQL.');
+  });
+});
 
 // --- Constants ---
 const IMAGE_LIBRARY_DIR = path.join(
@@ -71,14 +100,42 @@ const descriptionSchema = z.object({
 });
 
 // --- Types ---
-interface ImageData {
-  path: string; // Relative path from /public
-  url: string; // Public URL from Vercel Blob
+// Old interface (commented out or removed)
+// interface ImageData {
+//   path: string; // Relative path from /public
+//   url: string; // Public URL from Vercel Blob
+//   description: string;
+//   shortName: string;
+//   embedding: number[];
+//   hash: string; // SHA256 hash of the image file content
+//   blobPathname: string; // Pathname used for Vercel Blob storage
+// }
+
+// New interface matching DB schema from PRD
+interface DbImageData {
+  id: string; // UUID
+  blob_url: string; // TEXT NOT NULL
+  description: string; // TEXT NOT NULL
+  embedding: number[]; // VECTOR(1536) NOT NULL - represented as number[] in JS/TS
+  hash: string; // TEXT NOT NULL
+  filename: string | null; // TEXT, nullable
+  shortName: string | null; // TEXT, nullable
+  blob_pathname: string; // TEXT NOT NULL
+  layout_hint: 'left' | 'right' | 'center' | null; // TEXT, nullable CHECK
+  source: string; // TEXT NOT NULL ('static', 'getimg.ai', etc.)
+  created_at: Date; // TIMESTAMP WITH TIME ZONE NOT NULL
+  // Keep relative path from /public for mapping/comparison, but not in DB
+  relativePath?: string;
+}
+
+// Interface for items specifically for reporting table
+interface ReportingItem {
+  relativePath: string;
+  shortName: string | null;
   description: string;
-  shortName: string;
-  embedding: number[];
-  hash: string; // SHA256 hash of the image file content
-  blobPathname: string; // Pathname used for Vercel Blob storage
+  blob_url: string;
+  hash: string;
+  status: 'Added' | 'Updated' | 'Moved';
 }
 
 // --- Helper Functions ---
@@ -153,7 +210,13 @@ async function generateNewImageData(
   imageBuffer: Buffer,
   currentHash: string,
   blobPathname: string,
-): Promise<Omit<ImageData, 'path'>> {
+  filename: string, // Added filename
+): Promise<
+  Omit<
+    DbImageData,
+    'id' | 'created_at' | 'relativePath' | 'layout_hint' | 'source'
+  >
+> {
   // --- Vercel Blob Upload ---
   const blob = await put(blobPathname, imageBuffer, {
     access: 'public',
@@ -198,12 +261,14 @@ async function generateNewImageData(
   });
 
   return {
-    url: blobUrl,
+    blob_url: blobUrl,
     description: generatedData.description,
     shortName: generatedData.shortName,
     embedding,
     hash: currentHash,
-    blobPathname: blobPathname,
+    blob_pathname: blobPathname,
+    filename: filename, // Include filename
+    // layout_hint and source will be set during DB operation
   };
 }
 
@@ -218,35 +283,47 @@ async function main() {
     process.exit(1);
   }
 
-  // 2. Load Existing Data (if available)
-  const oldImageDataMap = new Map<string, ImageData>();
+  // 2. Load Existing Data (from Database)
+  const oldImageDataMap = new Map<string, DbImageData>(); // Key: relativePath from /public
+  const oldImageBlobPathnameMap = new Map<string, DbImageData>(); // Key: blob_pathname
+  let dbClient: PoolClient | null = null; // Declare client variable
+
   try {
-    const existingDataJson = await fs.readFile(OUTPUT_DATA_FILE, 'utf-8');
-    const existingDataArray = JSON.parse(existingDataJson) as ImageData[];
-    existingDataArray.forEach((data) => {
-      // Use the relative path from /public as the key
-      const relativePathKey = data.path.startsWith('/')
-        ? data.path.substring(1)
-        : data.path;
-      oldImageDataMap.set(relativePathKey, data);
-    });
-    console.log(`Loaded ${oldImageDataMap.size} existing image records.`);
-  } catch (error: any) {
-    if (error.code === 'ENOENT') {
-      console.log('No existing image library data found. Starting fresh.');
-      await ensureDirectoryExists(OUTPUT_DATA_FILE); // Ensure dir exists even if file doesn't
-    } else {
-      console.error(
-        `Error reading existing data file ${OUTPUT_DATA_FILE}:`,
-        error,
+    console.log('Connecting to database to load existing image records...');
+    dbClient = await pool.connect(); // Acquire client
+    const result = await dbClient.query<DbImageData>(
+      'SELECT * FROM images WHERE source = $1',
+      ['static'],
+    ); // Assuming a table named 'images' and filtering by source
+    result.rows.forEach((row) => {
+      // Reconstruct relative path from blob_pathname if needed, or assume it's stored/derivable
+      // For simplicity, let's assume blob_pathname structure mirrors relative path under 'library/'
+      // Example: blob_pathname 'library/category/image.jpg' -> relativePath 'images/library/category/image.jpg'
+      const relativePath = row.blob_pathname.replace(
+        /^library\//,
+        'images/library/',
       );
-      process.exit(1);
+      const dataWithRelativePath = { ...row, relativePath }; // Add relativePath for map key
+      oldImageDataMap.set(relativePath, dataWithRelativePath);
+      oldImageBlobPathnameMap.set(row.blob_pathname, dataWithRelativePath); // Map by blob_pathname as well
+    });
+    console.log(
+      `Loaded ${oldImageDataMap.size} existing 'static' image records from database.`,
+    );
+  } catch (error: any) {
+    console.error('Error loading data from database:', error);
+    if (dbClient) {
+      dbClient.release(); // Ensure client is released on error
     }
+    process.exit(1);
+  } finally {
+    // Release client if it was acquired - moved release here
+    // dbClient?.release(); // Keep client for main processing
   }
 
   // 3. Find current image files
   console.log(`Scanning for images in: ${IMAGE_LIBRARY_DIR}`);
-  const currentImagePaths = await findImageFiles(IMAGE_LIBRARY_DIR); // Absolute paths
+  const currentImagePaths = await findImageFiles(IMAGE_LIBRARY_DIR); // Get all absolute paths first
   if (currentImagePaths.length === 0) {
     console.log(
       'No image files found in library directory. Saving empty index.',
@@ -272,17 +349,24 @@ async function main() {
   });
 
   // 5. Process Images Concurrently
-  const newImageDataMap = new Map<string, ImageData>();
   const errors: { path: string; error: any; reason: string }[] = [];
   const stats = {
     processed: 0,
     reused: 0,
-    moved: 0, // Content same, path changed (blob re-uploaded)
+    moved: 0, // Content same, path changed (blob re-uploaded, DB updated)
+    deleted: 0, // Added counter for deletions
     errors: 0,
   };
   const limit = pLimit(CONCURRENCY);
-  const processedRelativePaths = new Set<string>(); // Track paths found on disk
-  const changedRelativePaths = new Set<string>(); // Track paths that were processed or moved
+  const processedRelativePaths = new Set<string>(); // Track relative paths found on disk
+  const changedItemsForReporting: ReportingItem[] = []; // Collect items for the summary table
+
+  // Acquire a client for the duration of processing
+  if (!dbClient) {
+    // Should not happen if initial load succeeded, but as a safeguard
+    console.error('Failed to acquire database client before processing.');
+    process.exit(1);
+  }
 
   const processingPromises = currentImagePaths.map((imagePath) =>
     limit(async () => {
@@ -291,82 +375,136 @@ async function main() {
       processedRelativePaths.add(relativeToPublic); // Track this path exists
       progressBar.update({ filename, status: 'Hashing...' });
 
-      // Declare existingData in the outer scope of the async function
-      let existingData: ImageData | undefined;
-      try {
-        existingData = oldImageDataMap.get(relativeToPublic); // Assign here
+      // Find existing data using relative path first
+      const existingData = oldImageDataMap.get(relativeToPublic);
 
+      try {
         const imageBuffer = await fs.readFile(imagePath);
         const currentHash = calculateHash(imageBuffer);
         const relativeToLibrary = path.relative(IMAGE_LIBRARY_DIR, imagePath);
+        // Ensure POSIX paths for blob storage
         const expectedBlobPathname = path.posix.join(
           'library',
           relativeToLibrary,
         );
-
-        let finalImageData: ImageData;
+        const layoutHint = determineLayoutHint(filename); // Function to determine hint from filename
 
         if (existingData && existingData.hash === currentHash) {
           // Content is the same
-          if (existingData.blobPathname === expectedBlobPathname) {
-            // Path is also the same, reuse everything
+          if (existingData.blob_pathname === expectedBlobPathname) {
+            // Path and content are the same, reuse everything
             progressBar.update({ status: 'Reused (Unchanged)' });
-            finalImageData = existingData;
+            // No DB action needed
             stats.reused++;
           } else {
             // Content same, but path changed (moved/renamed)
-            // Reuse AI data, but re-upload blob to new path
-            progressBar.update({ status: 'Re-uploading (Moved)' });
+            progressBar.update({ status: 'Re-uploading & DB Update (Moved)' });
+
+            // 1. Re-upload blob to new path
             const blob = await put(expectedBlobPathname, imageBuffer, {
               access: 'public',
-              allowOverwrite: true,
+              allowOverwrite: true, // Overwrite if somehow exists
             });
-            finalImageData = {
-              ...existingData, // Reuse description, shortName, embedding, hash
-              path: `/${relativeToPublic}`, // Update relative path from /public
-              url: blob.url, // Update blob URL
-              blobPathname: expectedBlobPathname, // Update blob pathname
-            };
+
+            // 2. Update Database Record
+            await dbClient.query(
+              `UPDATE images
+               SET blob_url = $1, blob_pathname = $2, filename = $3, layout_hint = $4
+               WHERE id = $5`, // Use ID to reliably update the correct record
+              [
+                blob.url,
+                expectedBlobPathname,
+                filename,
+                layoutHint,
+                existingData.id,
+              ],
+            );
+
             stats.moved++;
-            changedRelativePaths.add(relativeToPublic); // Mark as changed
+            changedItemsForReporting.push({
+              // Add to reporting
+              relativePath: relativeToPublic,
+              shortName: existingData.shortName,
+              description: existingData.description,
+              blob_url: blob.url,
+              hash: currentHash,
+              status: 'Moved',
+            });
           }
         } else {
           // New image or content modified
-          progressBar.update({ status: 'Generating AI Data...' });
+          progressBar.update({ status: 'Generating AI Data & DB Upsert...' });
+
+          // Generate Description, ShortName, Embedding (includes Blob upload)
           const newData = await generateNewImageData(
             imagePath,
             imageBuffer,
             currentHash,
             expectedBlobPathname,
+            filename, // Pass filename
           );
-          finalImageData = {
-            path: `/${relativeToPublic}`, // Relative path from /public
-            ...newData,
-          };
-          stats.processed++;
-          changedRelativePaths.add(relativeToPublic); // Mark as changed
-        }
 
-        newImageDataMap.set(relativeToPublic, finalImageData);
+          // Use UPSERT (INSERT ... ON CONFLICT ... UPDATE) to handle both new and modified cases
+          // We use blob_pathname as the conflict target, assuming it should be unique for static assets
+          const upsertQuery = `
+            INSERT INTO images (
+              blob_url, description, embedding, hash, filename, shortName,
+              blob_pathname, layout_hint, source, created_at
+            ) VALUES (
+              $1, $2, $3, $4, $5, $6, $7, $8, $9, NOW()
+            )
+            ON CONFLICT (blob_pathname) DO UPDATE SET
+              blob_url = EXCLUDED.blob_url,
+              description = EXCLUDED.description,
+              embedding = EXCLUDED.embedding,
+              hash = EXCLUDED.hash,
+              filename = EXCLUDED.filename,
+              shortName = EXCLUDED.shortName,
+              layout_hint = EXCLUDED.layout_hint,
+              source = EXCLUDED.source;
+            -- RETURNING id; -- Optionally return id if needed later
+          `;
+
+          await dbClient.query(upsertQuery, [
+            newData.blob_url,
+            newData.description,
+            `[${newData.embedding.join(',')}]`, // Format embedding array for pgvector
+            newData.hash,
+            newData.filename,
+            newData.shortName,
+            newData.blob_pathname,
+            layoutHint,
+            'static', // Source is 'static' for this script
+          ]);
+
+          const status: 'Added' | 'Updated' = existingData
+            ? 'Updated'
+            : 'Added';
+          stats.processed++;
+          changedItemsForReporting.push({
+            // Add to reporting
+            relativePath: relativeToPublic,
+            shortName: newData.shortName,
+            description: newData.description,
+            blob_url: newData.blob_url,
+            hash: newData.hash,
+            status: status,
+          });
+          if (existingData && status === 'Updated') {
+            // If it was an update based on content change, remove the old blob_pathname entry
+            // from the map to prevent it being marked as deleted later if the path also changed.
+            oldImageBlobPathnameMap.delete(existingData.blob_pathname);
+          }
+        }
       } catch (error: any) {
         errors.push({
           path: imagePath,
           error,
-          // Use the existingData declared outside the try block
           reason: existingData
             ? 'Error processing modified/moved image'
             : 'Error processing new image',
         });
         stats.errors++;
-        // Ensure path is added even on error if it was intended to be processed
-        if (
-          existingData &&
-          existingData.hash !== calculateHash(await fs.readFile(imagePath))
-        ) {
-          changedRelativePaths.add(relativeToPublic); // Mark as changed if content differs
-        } else if (!existingData) {
-          changedRelativePaths.add(relativeToPublic); // Mark as changed if new
-        }
       } finally {
         progressBar.increment();
       }
@@ -374,35 +512,99 @@ async function main() {
   );
 
   await Promise.allSettled(processingPromises); // Wait for all concurrent tasks
-
   progressBar.stop();
 
-  // 6. Identify and Handle Deletions
-  const deletedPaths: string[] = [];
-  oldImageDataMap.forEach((_, relativePathKey) => {
-    if (!processedRelativePaths.has(relativePathKey)) {
-      deletedPaths.push(relativePathKey);
-      // No need to remove from Vercel Blob for this script
+  // 6. Identify and Handle Deletions in DB
+  const deletedItemsForReporting: string[] = [];
+  try {
+    console.log('\nChecking for deleted images...');
+    const pathsToDelete: string[] = [];
+    oldImageBlobPathnameMap.forEach((imageData, blobPathname) => {
+      // An image is deleted if its original blob_pathname wasn't processed
+      // (meaning the file is gone from disk)
+      const correspondingRelativePath = imageData.relativePath;
+      if (
+        !correspondingRelativePath ||
+        !processedRelativePaths.has(correspondingRelativePath)
+      ) {
+        // Check if the blob_pathname exists in the newly processed items map to handle renames correctly
+        let foundAfterRename = false;
+        for (const item of changedItemsForReporting) {
+          if (
+            item.status === 'Moved' &&
+            item.relativePath === correspondingRelativePath
+          ) {
+            // This was handled by the MOVE logic (UPDATE in DB), not a delete.
+            foundAfterRename = true;
+            break;
+          }
+        }
+        // Also check if it was updated (content change, potentially same path)
+        for (const item of changedItemsForReporting) {
+          if (
+            item.status === 'Updated' &&
+            item.relativePath === correspondingRelativePath
+          ) {
+            // This was handled by the UPSERT logic (UPDATE in DB), not a delete.
+            foundAfterRename = true;
+            break;
+          }
+        }
+
+        if (!foundAfterRename) {
+          pathsToDelete.push(imageData.id); // Use ID for deletion
+          deletedItemsForReporting.push(
+            imageData.relativePath || imageData.blob_pathname,
+          ); // Report path
+        }
+      }
+    });
+
+    if (pathsToDelete.length > 0) {
+      console.log(`Deleting ${pathsToDelete.length} records from database...`);
+      // Delete in batches if necessary, though for moderate numbers, one query might be fine
+      const deleteQuery = 'DELETE FROM images WHERE id = ANY($1::uuid[])';
+      await dbClient.query(deleteQuery, [pathsToDelete]);
+      stats.deleted = pathsToDelete.length;
+      console.log(`${stats.deleted} records deleted.`);
+      // Note: This doesn't remove files from Vercel Blob storage.
+    } else {
+      console.log('No images detected as deleted.');
     }
-  });
-  if (deletedPaths.length > 0) {
-    console.log(
-      `\nDetected ${deletedPaths.length} images removed from the library directory.`,
-    );
-    // These are implicitly removed as they are not added to newImageDataMap
+  } catch (error) {
+    console.error('Error during database deletion:', error);
+    stats.errors += deletedItemsForReporting.length; // Count deletions as errors if deletion fails
+  } finally {
+    // Release the main processing client
+    if (dbClient) {
+      dbClient.release();
+      console.log('Database client released.');
+    }
   }
-  stats.errors += errors.length; // Update total errors
 
   // 7. Report Summary
   console.log('\n--- Processing Summary ---');
   console.log(`Total images found on disk: ${currentImagePaths.length}`);
   console.log(`  - Reused (unchanged):     ${stats.reused}`);
+  // processed includes both Added and Updated (content change)
+  const addedCount = changedItemsForReporting.filter(
+    (item) => item.status === 'Added',
+  ).length;
+  const updatedContentCount = changedItemsForReporting.filter(
+    (item) => item.status === 'Updated',
+  ).length;
+  console.log(`  - Added (new files):      ${addedCount}`);
+  console.log(`  - Updated (content change): ${updatedContentCount}`);
   console.log(`  - Updated (moved/renamed): ${stats.moved}`);
-  console.log(`  - Newly processed:        ${stats.processed}`);
-  console.log(`  - Images deleted:         ${deletedPaths.length}`);
+  console.log(`  - Images deleted in DB:   ${stats.deleted}`);
   console.log(`  - Errors:                 ${stats.errors}`);
   console.log(`--------------------------`);
-  console.log(`Total records in new index: ${newImageDataMap.size}`);
+  const finalDbCountResult = await pool.query(
+    "SELECT COUNT(*) FROM images WHERE source = 'static'",
+  );
+  console.log(
+    `Total 'static' records in DB: ${finalDbCountResult.rows[0].count}`,
+  );
 
   // 8. Report errors
   if (errors.length > 0) {
@@ -420,90 +622,95 @@ async function main() {
     });
   }
 
-  // Convert Map to Array for saving
-  const finalResultsArray = Array.from(newImageDataMap.values());
-  // Sort final array by path for consistent output
-  finalResultsArray.sort((a, b) => a.path.localeCompare(b.path));
-
-  // Filter for changed items to display in the table
-  const changedResultsArray = finalResultsArray.filter(
-    (result) => changedRelativePaths.has(result.path.substring(1)), // Check against tracked changed paths
+  // --- Print Summary Table for Changed Items ---
+  // Sort changed items for consistent table output
+  changedItemsForReporting.sort((a, b) =>
+    a.relativePath.localeCompare(b.relativePath),
   );
 
-  // --- Print Summary Table for Changed Items (Optional - can be large) ---
-  if (changedResultsArray.length > 0 && changedResultsArray.length < 50) {
-    // Limit table size for changed items
-    console.log('\n--- Updated/Added Content Summary ---'); // Updated title
+  if (
+    changedItemsForReporting.length > 0 &&
+    changedItemsForReporting.length < 50
+  ) {
+    console.log('\n--- Added / Updated / Moved Content Summary ---');
     const table = new Table({
       head: [
-        'Path',
+        'Path (Relative)', // Changed Header
         'Short Name',
         'Description',
         'Blob URL',
         'Hash (start)',
         'Status',
-      ], // Added Status column
-      colWidths: [30, 25, 40, 35, 15, 10], // Adjusted widths
+      ],
+      colWidths: [30, 25, 40, 35, 15, 10],
       wordWrap: true,
       style: { head: ['cyan'] },
     });
 
-    changedResultsArray.forEach((result) => {
-      const status = oldImageDataMap.has(result.path.substring(1))
-        ? 'Updated'
-        : 'Added'; // Determine status
+    changedItemsForReporting.forEach((result) => {
       table.push([
-        result.path,
-        result.shortName,
+        result.relativePath,
+        result.shortName ?? 'N/A', // Handle potential null
         result.description.substring(0, 100) +
-          (result.description.length > 100 ? '...' : ''), // Truncate desc
-        result.url,
-        result.hash.substring(0, 8), // Show start of hash
-        status, // Show if added or updated
+          (result.description.length > 100 ? '...' : ''),
+        result.blob_url,
+        result.hash.substring(0, 8),
+        result.status,
       ]);
     });
     console.log(table.toString());
-  } else if (changedResultsArray.length >= 50) {
+  } else if (changedItemsForReporting.length >= 50) {
     console.log(
-      `\nSkipping summary table for ${changedResultsArray.length} updated/added items.`,
+      `\nSkipping summary table for ${changedItemsForReporting.length} added/updated/moved items.`,
     );
-  } else if (stats.processed === 0 && stats.moved === 0 && stats.errors === 0) {
-    console.log('\nNo images were added or updated.');
+  } else if (
+    stats.processed === 0 &&
+    stats.moved === 0 &&
+    stats.errors === 0 &&
+    stats.deleted === 0
+  ) {
+    console.log('\nNo changes detected in the image library.');
   }
   // --- End Summary Table ---
 
-  // 9. Write results to JSON file
-  if (
-    finalResultsArray.length > 0 ||
-    deletedPaths.length > 0 ||
-    oldImageDataMap.size === 0
-  ) {
-    // Write even if empty now, to record deletions
-    try {
-      const jsonData = JSON.stringify(finalResultsArray, null, 2);
-      await fs.writeFile(OUTPUT_DATA_FILE, jsonData, 'utf-8');
-      console.log(`
-Successfully updated image library index.`);
-      console.log(`Data saved to: ${OUTPUT_DATA_FILE}`);
-    } catch (error) {
-      console.error(`\nError writing data to ${OUTPUT_DATA_FILE}:`, error);
-      process.exit(1); // Exit if final save fails
-    }
-  } else if (stats.errors === 0) {
-    console.log(
-      '\nNo changes detected and no errors. Output file remains unchanged.',
-    );
-  } else {
-    console.log('\nNo data generated due to errors. Output file not written.');
-  }
+  // 9. Finalize and Exit
+  await pool.end(); // Close the connection pool
+  console.log('\nImage library processing finished.');
 
   if (stats.errors > 0) {
     console.error(`\nScript finished with ${stats.errors} errors.`);
-    process.exit(1); // Exit with error code if any errors occurred
+    process.exit(1);
   }
+}
+
+// --- Helper function to determine layout hint ---
+function determineLayoutHint(
+  filename: string,
+): 'left' | 'right' | 'center' | null {
+  const lowerFilename = filename.toLowerCase();
+  if (
+    lowerFilename.endsWith('-left.jpg') ||
+    lowerFilename.endsWith('-left.png') ||
+    lowerFilename.endsWith('-left.webp')
+  ) {
+    return 'left';
+  }
+  if (
+    lowerFilename.endsWith('-right.jpg') ||
+    lowerFilename.endsWith('-right.png') ||
+    lowerFilename.endsWith('-right.webp')
+  ) {
+    return 'right';
+  }
+  // Add center logic if needed, e.g., endsWith('-center.jpg')
+  // if (lowerFilename.endsWith('-center.jpg') || lowerFilename.endsWith('-center.png')) {
+  //     return 'center';
+  // }
+  return null; // Default if no convention matches
 }
 
 main().catch((error) => {
   console.error('\nScript failed unexpectedly:', error);
+  pool.end(); // Ensure pool is closed on unexpected error
   process.exit(1);
 });

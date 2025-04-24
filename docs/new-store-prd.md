@@ -757,8 +757,8 @@ This plan outlines the development tasks for the Database Migration, On-Demand I
 - [x] Provision Neon PostgreSQL database and enable `pgvector`.
 - [x] Define and create the `images` table schema.
 - [x] Add database connection details to environment variables.
-- [ ] Modify `scripts/rebuild-image-library-index.ts` to interact with the PostgreSQL database instead of `image-library.json`, preserving incremental logic (hash comparison, etc.).
-- [ ] Run the modified `scripts/rebuild-image-library-index.ts` script for the initial data migration, populating the `images` table from the current local library.
+- [x] Modify `scripts/rebuild-image-library-index.ts` to interact with the PostgreSQL database instead of `image-library.json`, preserving incremental logic (hash comparison, etc.).
+- [x] Run the modified `scripts/rebuild-image-library-index.ts` script for the initial data migration, populating the `images` table from the current local library.
 - [ ] Refactor the `/api/generate` route's image selection logic to query the database using `node-postgres` and `pgvector` instead of loading `library.json`.
 - [ ] Test the existing image selection flow thoroughly to ensure it works correctly with the database backend.
 - [ ] Create necessary database indexes (e.g., HNSW on embeddings).

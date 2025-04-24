@@ -11,7 +11,7 @@ CREATE TABLE images (
     hash TEXT NOT NULL, -- SHA256 hash of the image content
     filename TEXT, -- Optional: original filename for reference
     shortName TEXT, -- Optional: short AI-generated name
-    blob_pathname TEXT NOT NULL, -- Pathname used in Vercel Blob
+    blob_pathname TEXT NOT NULL UNIQUE, -- Pathname used in Vercel Blob, ADDED UNIQUE constraint
     -- Specific to certain image types (e.g., hero images), NULL otherwise
     layout_hint TEXT CHECK (layout_hint IN ('left', 'right', 'center')),
     -- 'static' or the name of the generation service (e.g., 'getimg.ai')
