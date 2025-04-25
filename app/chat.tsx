@@ -37,6 +37,10 @@ const availableUsers = [
 export const ChatInner = ({ user }: { user: User }) => {
   const [activeTab, setActiveTab] = useState('preview');
   const [prompt, setPrompt] = useState('');
+  // State for image generation mode
+  const [imageGenerationMode, setImageGenerationMode] = useState<
+    'stock' | 'generate'
+  >('stock');
   // State for JSON response
   const [responseJson, setResponseJson] = useState<object | null>(null);
   const [storeUrl, setStoreUrl] = useState<string | null>(null); // State for store URL
@@ -58,8 +62,8 @@ export const ChatInner = ({ user }: { user: User }) => {
         headers: {
           'Content-Type': 'application/json',
         },
-        // Send prompt and selectedUserId
-        body: JSON.stringify({ prompt, userId: user.id }), // <-- Send userId
+        // Send prompt and selectedUserId and imageGenerationMode
+        body: JSON.stringify({ prompt, userId: user.id, imageGenerationMode }),
       });
 
       if (!response.ok) {
@@ -116,6 +120,25 @@ export const ChatInner = ({ user }: { user: User }) => {
           onChange={(e) => setPrompt(e.target.value)}
           disabled={isLoading}
         />
+        {/* TODO: Switch this to either radio group or a dropdown */}
+        <div className="mb-4">
+          <Tabs
+            value={imageGenerationMode}
+            onValueChange={(value) =>
+              setImageGenerationMode(value as 'stock' | 'generate')
+            }
+            className="w-full"
+          >
+            <TabsList className="grid w-full grid-cols-2 h-9">
+              <TabsTrigger value="stock" className="text-xs px-2">
+                Use Stock Images
+              </TabsTrigger>
+              <TabsTrigger value="generate" className="text-xs px-2">
+                Generate New Images
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
         <div className="flex gap-2 flex-wrap">
           {/* Example Buttons */}
           <Button

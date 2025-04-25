@@ -159,8 +159,18 @@ async function findImageInDB(
   return bestMatchUrl;
 }
 
-// --- Image Placeholder Replacement Logic (Refactored) ---
-async function replaceImagePlaceholders(json: any): Promise<any> {
+/**
+ * Recursively traverses a JSON object/array and replaces image placeholder URLs
+ * (matching `https://yns.img?description=...`) with URLs found via DB similarity search.
+ * Handles different image types (product, hero) and alignment requirements.
+ * @param json The JSON data (or sub-part) to process.
+ * @param imageMode Determines whether to use DB lookup ('stock') or placeholder for generation ('generate') for PRODUCT images.
+ * @returns The modified JSON data.
+ */
+async function replaceImagePlaceholders(
+  json: any,
+  imageMode: 'stock' | 'generate',
+): Promise<any> {
   let totalPlaceholders = 0;
   let successfulMatches = 0;
 
@@ -266,27 +276,44 @@ async function replaceImagePlaceholders(json: any): Promise<any> {
         typeof product.imageUrl === 'string' &&
         product.imageUrl.startsWith('https://yns.img?description=')
       ) {
-        totalPlaceholders++;
         const placeholderUrl = product.imageUrl;
         try {
           const url = new URL(placeholderUrl);
           const description = url.searchParams.get('description');
 
           if (description) {
-            const bestMatchUrl = await findImageInDB(description, 'product');
+            totalPlaceholders++;
 
-            if (bestMatchUrl) {
-              product.imageUrl = bestMatchUrl;
-              successfulMatches++;
+            // --- Conditional Image Handling ---
+            if (imageMode === 'generate') {
+              // --- GENERATE PATH (Placeholder) ---
               console.log(
-                `Product Image Match: Replaced placeholder for "${product.name || 'Unknown'}" with ${bestMatchUrl}`,
+                `[Generate Mode] Product Image Request: "${description.substring(0, 70)}..."`,
               );
-            } else {
+              // For now, just use the fallback URL. Actual generation logic will replace this.
               product.imageUrl = FALLBACK_IMAGE_URL;
-              console.warn(
-                `Product Image Match: No suitable image found for "${product.name || 'Unknown'}" (Desc: "${description}"). Using fallback.`,
+              // Note: successfulMatches is not incremented here as generation hasn't happened yet
+            } else {
+              // --- STOCK PATH (Existing DB Lookup) ---
+              console.log(
+                `[Stock Mode] Product Image Request: "${description.substring(0, 70)}..."`,
               );
+              const bestMatchUrl = await findImageInDB(description, 'product'); // Find in DB
+
+              if (bestMatchUrl) {
+                product.imageUrl = bestMatchUrl;
+                successfulMatches++; // Increment for successful DB match
+                console.log(
+                  `[Stock Mode] Product Image Match: Replaced placeholder for "${product.name || 'Unknown'}" with ${bestMatchUrl}`,
+                );
+              } else {
+                product.imageUrl = FALLBACK_IMAGE_URL;
+                console.warn(
+                  `[Stock Mode] Product Fallback: No DB match for "${product.name || 'Unknown'}" (Desc: "${description.substring(0, 70)}..."). Using fallback.`,
+                );
+              }
             }
+            // --- End Conditional Image Handling ---
           } else {
             console.warn(
               'Product Placeholder URL missing description:',
@@ -334,6 +361,9 @@ export async function POST(req: Request) {
     const body = await req.json();
     const userPrompt = body.prompt;
     const userId = body.userId;
+    // Default to 'stock' if invalid or missing
+    const imageGenerationMode =
+      body.imageGenerationMode === 'generate' ? 'generate' : 'stock';
 
     if (!userPrompt || typeof userPrompt !== 'string') {
       return NextResponse.json(
@@ -405,7 +435,10 @@ export async function POST(req: Request) {
     // --- Replace Image Placeholders ---
     console.log('Replacing image placeholders...');
     const startTimeReplace = Date.now();
-    const finalJson = await replaceImagePlaceholders(generatedJson);
+    const finalJson = await replaceImagePlaceholders(
+      generatedJson,
+      imageGenerationMode,
+    );
     const endTimeReplace = Date.now();
     console.log(
       `Image replacement took ${endTimeReplace - startTimeReplace}ms`,
