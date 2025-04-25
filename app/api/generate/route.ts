@@ -4,6 +4,7 @@ import { openai } from '@ai-sdk/openai';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { Pool } from 'pg';
+import { callGetImgApi } from '../../lib/getimg-api'; // Import the helper
 
 // --- Constants & Types ---
 const EMBEDDING_MODEL = openai.embedding('text-embedding-3-small');
@@ -159,12 +160,50 @@ async function findImageInDB(
   return bestMatchUrl;
 }
 
+// --- NEW HELPER FUNCTION for getimg.ai ---
+/**
+ * Calls the getimg.ai API for a list of placeholders concurrently and logs results.
+ * This function does not modify the JSON, it only performs the API calls for logging.
+ */
+async function generateAndLogImagesWithGetImgAI(
+  placeholders: { originalUrl: string; description: string }[],
+): Promise<void> {
+  if (!placeholders || placeholders.length === 0) {
+    return; // Nothing to do
+  }
+
+  console.log(
+    `[getimg.ai] Starting generation for ${placeholders.length} product images...`,
+  );
+
+  // TODO: Implement concurrency limiting (e.g., p-limit) if needed.
+  const generationPromises = placeholders.map(async (p) => {
+    const imageUrl = await callGetImgApi(p.description);
+    // Logging is handled within callGetImgApi
+    // We don't need to return/use the URL here in this phase
+  });
+
+  // Wait for all API calls to settle (complete or fail)
+  const results = await Promise.allSettled(generationPromises);
+
+  const successfulGenerations = results.filter(
+    (r) => r.status === 'fulfilled',
+  ).length;
+  const failedGenerations = results.length - successfulGenerations;
+
+  console.log(
+    `[getimg.ai] Generation finished. Success: ${successfulGenerations}, Failed/Timeout: ${failedGenerations}`,
+  );
+  // No return value needed, side effect is logging
+}
+// --- END NEW HELPER FUNCTION ---
+
 /**
  * Recursively traverses a JSON object/array and replaces image placeholder URLs
  * (matching `https://yns.img?description=...`) with URLs found via DB similarity search.
  * Handles different image types (product, hero) and alignment requirements.
  * @param json The JSON data (or sub-part) to process.
- * @param imageMode Determines whether to use DB lookup ('stock') or placeholder for generation ('generate') for PRODUCT images.
+ * @param imageMode Determines whether to use DB lookup ('stock') or getimg.ai calls ('generate') for PRODUCT images.
  * @returns The modified JSON data.
  */
 async function replaceImagePlaceholders(
@@ -172,7 +211,12 @@ async function replaceImagePlaceholders(
   imageMode: 'stock' | 'generate',
 ): Promise<any> {
   let totalPlaceholders = 0;
-  let successfulMatches = 0;
+  let successfulMatches = 0; // Tracks successful DB lookups primarily
+  const productPlaceholdersToGenerate: {
+    originalUrl: string;
+    description: string;
+    productRef: any;
+  }[] = []; // <<< ADDED
 
   if (!pool) {
     console.warn('Database pool not available. Skipping image replacement.');
@@ -206,7 +250,7 @@ async function replaceImagePlaceholders(
                 const description = url.searchParams.get('description');
 
                 if (description) {
-                  totalPlaceholders++;
+                  totalPlaceholders++; // Count all valid placeholders
                   const bestMatchUrl = await findImageInDB(
                     description,
                     'hero',
@@ -215,7 +259,7 @@ async function replaceImagePlaceholders(
 
                   if (bestMatchUrl) {
                     slide.image.src = bestMatchUrl;
-                    successfulMatches++;
+                    successfulMatches++; // Increment for successful DB lookup
                     console.log(
                       `Hero Image Match: Replaced placeholder for alignment "${alignment}" with ${bestMatchUrl}`,
                     );
@@ -244,12 +288,11 @@ async function replaceImagePlaceholders(
 
             // Handle single or multi-slide structure
             if (Array.isArray(section.data?.slides)) {
-              console.log(
-                `Processing HeroSection (Multi-slide) in path: ${pathKey}`,
-              );
-              for (const slide of section.data.slides) {
-                await processSlide(slide);
-              }
+              // console.log(
+              //   `Processing HeroSection (Multi-slide) in path: ${pathKey}`,
+              // );
+              const slidePromises = section.data.slides.map(processSlide);
+              await Promise.allSettled(slidePromises); // Process slides concurrently
             } else if (section.data?.image) {
               console.log(
                 `Processing HeroSection (Single-slide) in path: ${pathKey}`,
@@ -270,6 +313,8 @@ async function replaceImagePlaceholders(
   }
 
   if (Array.isArray(json.products)) {
+    const productProcessingPromises: Promise<void>[] = []; // Store promises for concurrent execution
+
     for (const product of json.products) {
       if (
         product &&
@@ -277,22 +322,33 @@ async function replaceImagePlaceholders(
         product.imageUrl.startsWith('https://yns.img?description=')
       ) {
         const placeholderUrl = product.imageUrl;
-        try {
-          const url = new URL(placeholderUrl);
-          const description = url.searchParams.get('description');
+        totalPlaceholders++; // Count all valid placeholders
 
-          if (description) {
-            totalPlaceholders++;
+        // Wrap processing in an async function for Promise.allSettled
+        const processProduct = async () => {
+          try {
+            const url = new URL(placeholderUrl);
+            const description = url.searchParams.get('description');
+
+            if (!description) {
+              console.warn(
+                'Product Placeholder URL missing description:',
+                placeholderUrl,
+              );
+              product.imageUrl = FALLBACK_IMAGE_URL;
+              return; // Stop processing this product
+            }
 
             // --- Conditional Image Handling ---
             if (imageMode === 'generate') {
-              // --- GENERATE PATH (Placeholder) ---
-              console.log(
-                `[Generate Mode] Product Image Request: "${description.substring(0, 70)}..."`,
-              );
-              // For now, just use the fallback URL. Actual generation logic will replace this.
-              product.imageUrl = FALLBACK_IMAGE_URL;
-              // Note: successfulMatches is not incremented here as generation hasn't happened yet
+              // --- GENERATE PATH ---
+              // Add to list for batch processing later
+              productPlaceholdersToGenerate.push({
+                originalUrl: placeholderUrl,
+                description: description,
+                productRef: product, // Keep reference to modify later
+              });
+              // NOTE: We don't set fallback URL here yet. It's done after all generation calls.
             } else {
               // --- STOCK PATH (Existing DB Lookup) ---
               console.log(
@@ -314,23 +370,34 @@ async function replaceImagePlaceholders(
               }
             }
             // --- End Conditional Image Handling ---
-          } else {
-            console.warn(
-              'Product Placeholder URL missing description:',
+          } catch (error) {
+            console.error(
+              'Error processing Product placeholder:',
               placeholderUrl,
+              error,
             );
-            product.imageUrl = FALLBACK_IMAGE_URL;
+            product.imageUrl = FALLBACK_IMAGE_URL; // Set fallback on error during processing
           }
-        } catch (error) {
-          console.error(
-            'Error processing Product placeholder:',
-            placeholderUrl,
-            error,
-          );
-          product.imageUrl = FALLBACK_IMAGE_URL;
-        }
+        };
+        productProcessingPromises.push(processProduct());
       }
     }
+    // Wait for all product stock lookups/parsing to complete
+    await Promise.allSettled(productProcessingPromises);
+
+    // --- Execute Generation Calls (if any) --- <<< ADDED BLOCK
+    if (productPlaceholdersToGenerate.length > 0) {
+      await generateAndLogImagesWithGetImgAI(productPlaceholdersToGenerate);
+
+      // After awaiting the logging, set all generated product images to fallback
+      for (const item of productPlaceholdersToGenerate) {
+        item.productRef.imageUrl = FALLBACK_IMAGE_URL;
+      }
+      console.log(
+        `[Generate Mode] Set ${productPlaceholdersToGenerate.length} product image URLs to fallback: ${FALLBACK_IMAGE_URL}`,
+      );
+    }
+    // --- End Generation Calls --- <<< ADDED BLOCK
   }
 
   // Log overall statistics
@@ -339,7 +406,7 @@ async function replaceImagePlaceholders(
       2,
     );
     console.log(
-      `Image Placeholder Stats: Processed=${totalPlaceholders}, Matched=${successfulMatches}, Success Rate=${successRate}%`,
+      `Image Placeholder Stats: Processed=${totalPlaceholders}, DB Matched=${successfulMatches}, Success Rate=${successRate}%`,
     );
   } else {
     console.log('Image Placeholder Stats: No placeholders found to process.');
