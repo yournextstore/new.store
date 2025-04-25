@@ -70,6 +70,7 @@ export async function callGetImgApi(prompt: string): Promise<string | null> {
       console.log(
         `[getimg.ai] Success: Received image URL for prompt "${prompt.substring(0, 70)}..."`,
       );
+      console.log(`[getimg.ai] URL: ${imageUrl}`);
       return imageUrl;
     } else {
       console.error(
