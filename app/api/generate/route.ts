@@ -3,147 +3,174 @@ import { generateText, cosineSimilarity, embed } from 'ai';
 import { openai } from '@ai-sdk/openai';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { Pool } from 'pg';
 
 // --- Constants & Types ---
-const IMAGE_LIBRARY_PATH = path.join(
-  process.cwd(),
-  'data',
-  'lib',
-  'image-library.json',
-);
 const EMBEDDING_MODEL = openai.embedding('text-embedding-3-small');
 const SIMILARITY_THRESHOLD = 0.45; // Adjust as needed
 const FALLBACK_IMAGE_URL = 'https://via.placeholder.com/300'; // Use a generic placeholder URL if no match found
+const COSINE_DISTANCE_THRESHOLD = 1 - SIMILARITY_THRESHOLD; // pgvector uses distance
 
-interface LibraryImageData {
-  path: string;
-  url: string; // Vercel Blob URL
-  description: string;
-  shortName: string;
-  embedding: number[];
-}
-
-// --- Load Image Library Data (Load once, reuse if possible in server context) ---
-let imageLibrary: LibraryImageData[] = [];
-async function loadImageLibrary() {
-  if (imageLibrary.length === 0) {
-    try {
-      console.log(`Loading image library from: ${IMAGE_LIBRARY_PATH}`);
-      const fileContent = await fs.readFile(IMAGE_LIBRARY_PATH, 'utf-8');
-      imageLibrary = JSON.parse(fileContent);
-      console.log(`Loaded ${imageLibrary.length} images into library.`);
-    } catch (error) {
-      console.error('Failed to load image library:', error);
-      // Decide how to handle this - throw error, or continue without image replacement?
-      // For now, we'll log and potentially continue, resulting in placeholders being sent.
-      imageLibrary = []; // Ensure it's empty on failure
-    }
+// --- Database Connection ---
+let pool: Pool;
+try {
+  if (!process.env.POSTGRES_URL) {
+    throw new Error('POSTGRES_URL environment variable is not set.');
   }
-  return imageLibrary;
+  pool = new Pool({
+    connectionString: process.env.POSTGRES_URL,
+    // Add SSL config if needed for Neon or other providers
+    // ssl: { rejectUnauthorized: false } // Example for Neon, adjust as necessary
+  });
+
+  // Test connection on initialization (optional but recommended)
+  pool
+    .query('SELECT NOW()')
+    .then(() => {
+      console.log('Database pool connected successfully.');
+    })
+    .catch((err) => {
+      console.error('Database pool connection failed:', err);
+      // Depending on requirements, you might want to throw or handle differently
+    });
+} catch (error) {
+  console.error('Failed to initialize database pool:', error);
+  // Handle critical initialization error - maybe the app can't run without DB?
+  // For now, log the error. The absence of the pool will cause errors later.
+  pool = null as any; // Set pool to null/invalid state if init fails
 }
 
-// --- Image Placeholder Replacement Logic ---
+// --- New Database Query Function ---
+async function findImageInDB(
+  description: string,
+  imageType: 'hero' | 'product',
+  alignment?: 'left' | 'right',
+): Promise<string | null> {
+  if (!pool) {
+    console.error('Database pool is not initialized. Cannot query images.');
+    return null;
+  }
+  if (!description) return null;
+
+  let bestMatchUrl: string | null = null;
+
+  try {
+    const { embedding } = await embed({
+      model: EMBEDDING_MODEL,
+      value: description,
+    });
+
+    // Format the embedding array into the string format pgvector expects
+    const embeddingString = JSON.stringify(embedding);
+
+    const client = await pool.connect(); // Get connection from pool
+
+    try {
+      if (imageType === 'hero') {
+        if (!alignment) {
+          console.warn('Hero image search called without alignment. Skipping.');
+          return null;
+        }
+        // Query 1: Alignment + Threshold
+        const query1 = `
+          SELECT blob_url
+          FROM images
+          WHERE filename LIKE '%-hero-%' -- Use filename convention
+            AND layout_hint = $1
+            AND source = 'static' -- Ensure it's from the library build
+            AND embedding <=> $2::vector < $3
+          ORDER BY embedding <=> $2::vector ASC
+          LIMIT 1;
+        `;
+        const result1 = await client.query(query1, [
+          alignment,
+          embeddingString,
+          COSINE_DISTANCE_THRESHOLD,
+        ]);
+
+        if (result1.rows.length > 0) {
+          bestMatchUrl = result1.rows[0].blob_url;
+          console.log(
+            `DB Hero Match (Align + Threshold): Found ${bestMatchUrl} for alignment ${alignment}`,
+          );
+        } else {
+          // Query 2: Alignment Only (Fallback 1)
+          console.log(
+            `DB Hero Fallback 1: Searching alignment "${alignment}" without threshold...`,
+          );
+          const query2 = `
+            SELECT blob_url
+            FROM images
+            WHERE filename LIKE '%-hero-%' -- Use filename convention
+              AND layout_hint = $1
+              AND source = 'static' -- Ensure it's from the library build
+            ORDER BY embedding <=> $2::vector ASC
+            LIMIT 1;
+          `;
+          const result2 = await client.query(query2, [
+            alignment,
+            embeddingString,
+          ]);
+          if (result2.rows.length > 0) {
+            bestMatchUrl = result2.rows[0].blob_url;
+            console.log(
+              `DB Hero Match (Align Only): Found ${bestMatchUrl} for alignment ${alignment}`,
+            );
+          } else {
+            console.log(
+              `DB Hero Fallback 2: No match found for alignment "${alignment}" even without threshold.`,
+            );
+          }
+        }
+      } else if (imageType === 'product') {
+        const query = `
+          SELECT blob_url
+          FROM images
+          WHERE blob_pathname LIKE 'library/%/products/%' -- Match product paths with intermediate dir
+            AND source = 'static' -- Ensure it's from the library build
+            AND embedding <=> $1::vector < $2
+          ORDER BY embedding <=> $1::vector ASC
+          LIMIT 1;
+        `;
+        const result = await client.query(query, [
+          embeddingString,
+          COSINE_DISTANCE_THRESHOLD,
+        ]);
+        if (result.rows.length > 0) {
+          bestMatchUrl = result.rows[0].blob_url;
+          console.log(`DB Product Match: Found ${bestMatchUrl}`);
+        } else {
+          console.log(
+            `DB Product Match: No suitable match found below threshold for description "${description.substring(0, 50)}..."`,
+          );
+        }
+      }
+    } finally {
+      client.release(); // Release connection back to the pool
+    }
+  } catch (error) {
+    console.error(
+      `Error querying database for ${imageType} image (Desc: "${description.substring(0, 50)}...") :`,
+      error,
+    );
+    return null; // Return null on error
+  }
+
+  return bestMatchUrl;
+}
+
+// --- Image Placeholder Replacement Logic (Refactored) ---
 async function replaceImagePlaceholders(json: any): Promise<any> {
-  const library = await loadImageLibrary();
   let totalPlaceholders = 0;
   let successfulMatches = 0;
 
-  if (!library || library.length === 0) {
-    console.warn(
-      'Image library not loaded or empty. Skipping image replacement.',
-    );
-    return json; // Return original JSON if library isn't available
+  if (!pool) {
+    console.warn('Database pool not available. Skipping image replacement.');
+    return json;
   }
 
   if (!json || typeof json !== 'object') return json; // Basic type check
 
-  // Filter library into subsets
-  const productLibrary = library.filter((item) =>
-    item.path.includes('/products/'),
-  );
-  const heroLibrary = library.filter((item) => item.path.includes('-hero-'));
-
-  console.log(
-    `Filtered libraries: ${productLibrary.length} product images, ${heroLibrary.length} hero images.`,
-  );
-
-  // Helper function for finding the best match
-  async function findBestMatch(
-    description: string,
-    targetLibrary: LibraryImageData[],
-    options: {
-      threshold?: number;
-      alignment?: 'left' | 'right' | null;
-      applyThreshold: boolean; // Flag to control threshold application
-    },
-  ): Promise<LibraryImageData | null> {
-    if (!description || targetLibrary.length === 0) return null;
-
-    try {
-      const { embedding } = await embed({
-        model: EMBEDDING_MODEL,
-        value: description,
-      });
-
-      let bestMatchItem: LibraryImageData | null = null;
-      let highestSimilarity = -1;
-
-      for (const item of targetLibrary) {
-        if (
-          item.embedding &&
-          Array.isArray(item.embedding) &&
-          item.embedding.length > 0
-        ) {
-          // 1. Check alignment if required
-          if (options.alignment) {
-            const requiredSuffix = `-${options.alignment}.`; // e.g., -left.
-            if (!item.path.includes(requiredSuffix)) {
-              continue; // Skip if alignment doesn't match
-            }
-          }
-
-          // 2. Calculate similarity
-          const similarity = cosineSimilarity(embedding, item.embedding);
-
-          // 3. Check threshold if required
-          if (
-            options.applyThreshold &&
-            similarity < (options.threshold ?? -1)
-          ) {
-            continue; // Skip if below threshold and threshold is applied
-          }
-
-          // 4. Update best match if this one is better
-          if (similarity > highestSimilarity) {
-            highestSimilarity = similarity;
-            bestMatchItem = item;
-          }
-        } else {
-          console.warn(
-            `Skipping library item due to invalid embedding: ${item.url} `,
-          );
-        }
-      }
-
-      // Log results (optional, can be refined)
-      if (bestMatchItem) {
-        console.log(
-          `Match found for description: "${description}" (Similarity: ${highestSimilarity.toFixed(4)}, Alignment: ${options.alignment ?? 'N/A'}, Threshold Applied: ${options.applyThreshold}). Selected: ${bestMatchItem.url}`,
-        );
-      } else {
-        console.log(
-          `No suitable match found for description: "${description}" (Alignment: ${options.alignment ?? 'N/A'}, Threshold Applied: ${options.applyThreshold})`,
-        );
-      }
-
-      return bestMatchItem;
-    } catch (error) {
-      console.error('Error during embedding or similarity search:', error);
-      return null;
-    }
-  }
-
-  // --- Process Sections (including Hero) ---
   if (json.paths && typeof json.paths === 'object') {
     for (const pathKey in json.paths) {
       if (Array.isArray(json.paths[pathKey])) {
@@ -168,59 +195,29 @@ async function replaceImagePlaceholders(json: any): Promise<any> {
                 const url = new URL(placeholderUrl);
                 const description = url.searchParams.get('description');
 
-                if (description && heroLibrary.length > 0) {
+                if (description) {
                   totalPlaceholders++;
-                  let finalMatchItem: LibraryImageData | null = null;
-
-                  // Attempt 1: Find best match with alignment and threshold
-                  finalMatchItem = await findBestMatch(
+                  const bestMatchUrl = await findImageInDB(
                     description,
-                    heroLibrary,
-                    {
-                      alignment,
-                      threshold: SIMILARITY_THRESHOLD,
-                      applyThreshold: true,
-                    },
+                    'hero',
+                    alignment,
                   );
 
-                  // Attempt 2 (Fallback 1): Find best match with alignment, ignoring threshold
-                  if (!finalMatchItem) {
-                    console.log(
-                      `Hero Fallback 1: Searching for alignment "${alignment}" without threshold...`,
-                    );
-                    finalMatchItem = await findBestMatch(
-                      description,
-                      heroLibrary,
-                      {
-                        alignment,
-                        applyThreshold: false,
-                      },
-                    );
-                  }
-
-                  // Apply result or final fallback
-                  if (finalMatchItem) {
-                    slide.image.src = finalMatchItem.url;
+                  if (bestMatchUrl) {
+                    slide.image.src = bestMatchUrl;
                     successfulMatches++;
                     console.log(
-                      `Hero Image Match: Replaced placeholder for alignment "${alignment}" with ${finalMatchItem.url}`,
+                      `Hero Image Match: Replaced placeholder for alignment "${alignment}" with ${bestMatchUrl}`,
                     );
                   } else {
-                    // Fallback 2: Use generic placeholder if no alignment match found at all
                     slide.image.src = FALLBACK_IMAGE_URL;
                     console.warn(
-                      `Hero Fallback 2: No image found matching alignment "${alignment}" for description "${description}". Using fallback URL.`,
+                      `Hero Fallback Final: No image found matching alignment "${alignment}" for description "${description}". Using fallback URL.`,
                     );
                   }
-                } else if (!description) {
-                  console.warn(
-                    'Hero Placeholder URL missing description:',
-                    placeholderUrl,
-                  );
-                  slide.image.src = FALLBACK_IMAGE_URL;
                 } else {
                   console.warn(
-                    'Hero library is empty, cannot process placeholder:',
+                    'Hero Placeholder URL missing description:',
                     placeholderUrl,
                   );
                   slide.image.src = FALLBACK_IMAGE_URL;
@@ -240,7 +237,9 @@ async function replaceImagePlaceholders(json: any): Promise<any> {
               console.log(
                 `Processing HeroSection (Multi-slide) in path: ${pathKey}`,
               );
-              await Promise.all(section.data.slides.map(processSlide));
+              for (const slide of section.data.slides) {
+                await processSlide(slide);
+              }
             } else if (section.data?.image) {
               console.log(
                 `Processing HeroSection (Single-slide) in path: ${pathKey}`,
@@ -260,43 +259,27 @@ async function replaceImagePlaceholders(json: any): Promise<any> {
     }
   }
 
-  // --- Process product images ---
-  if (Array.isArray(json.products) && productLibrary.length > 0) {
-    const productPlaceholders = json.products.filter(
-      (p: any) =>
-        p &&
-        typeof p.imageUrl === 'string' &&
-        p.imageUrl.startsWith('https://yns.img?description='),
-    );
-    totalPlaceholders += productPlaceholders.length;
-
+  if (Array.isArray(json.products)) {
     for (const product of json.products) {
       if (
         product &&
         typeof product.imageUrl === 'string' &&
         product.imageUrl.startsWith('https://yns.img?description=')
       ) {
+        totalPlaceholders++;
         const placeholderUrl = product.imageUrl;
         try {
           const url = new URL(placeholderUrl);
           const description = url.searchParams.get('description');
 
           if (description) {
-            const bestMatchItem = await findBestMatch(
-              description,
-              productLibrary,
-              {
-                threshold: SIMILARITY_THRESHOLD,
-                applyThreshold: true, // Threshold is strict for products
-                alignment: null, // No alignment needed for products
-              },
-            );
+            const bestMatchUrl = await findImageInDB(description, 'product');
 
-            if (bestMatchItem) {
-              product.imageUrl = bestMatchItem.url;
+            if (bestMatchUrl) {
+              product.imageUrl = bestMatchUrl;
               successfulMatches++;
               console.log(
-                `Product Image Match: Replaced placeholder for "${product.name || 'Unknown'}" with ${bestMatchItem.url}`,
+                `Product Image Match: Replaced placeholder for "${product.name || 'Unknown'}" with ${bestMatchUrl}`,
               );
             } else {
               product.imageUrl = FALLBACK_IMAGE_URL;
@@ -321,20 +304,6 @@ async function replaceImagePlaceholders(json: any): Promise<any> {
         }
       }
     }
-  } else if (Array.isArray(json.products) && productLibrary.length === 0) {
-    console.warn(
-      'Product library is empty, cannot process product image placeholders.',
-    );
-    // Optionally set all product placeholders to fallback
-    json.products.forEach((p: any) => {
-      if (
-        p &&
-        typeof p.imageUrl === 'string' &&
-        p.imageUrl.startsWith('https://yns.img?description=')
-      ) {
-        p.imageUrl = FALLBACK_IMAGE_URL;
-      }
-    });
   }
 
   // Log overall statistics
@@ -354,9 +323,6 @@ async function replaceImagePlaceholders(json: any): Promise<any> {
 
 export async function POST(req: Request) {
   try {
-    // Ensure library is loaded on first request (or potentially earlier in a server context)
-    await loadImageLibrary();
-
     // main prompt that generates the complete store JSON representation
     const prototypePrompt = await fs.readFile(
       path.join(process.cwd(), 'app/api/generate/gen-store-json-prompt.md'),
@@ -533,7 +499,15 @@ export async function POST(req: Request) {
     // --- End YNS API Call ---
   } catch (error) {
     console.error('API Error in POST handler:', error);
-    // Consider more specific error handling based on potential errors from generateText
+    if (!pool && (error as Error).message.includes('database pool')) {
+      return NextResponse.json(
+        {
+          error:
+            'Internal Server Error: Database connection failed on startup.',
+        },
+        { status: 500 },
+      );
+    }
     if (error instanceof Error) {
       return NextResponse.json(
         { error: 'Internal Server Error', details: error.message },
