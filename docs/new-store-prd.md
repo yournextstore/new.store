@@ -781,9 +781,9 @@ This plan outlines the development tasks for the Database Migration, On-Demand I
 - [ ] *(Prerequisite: 8.4.1 Complete)*
 - [x] Create prototype route (/api/dev/test-getimg) to validate getimg.ai API interaction and key setup.
 - [x] Add UI toggle/selector on the frontend to choose between "Stock Images" (DB Lookup) and "Generate New Images".
-- [x] Implement basic conditional logic shell in `/api/generate` based on the UI selection.
+- [x] Implement basic conditional logic scaffolding in `/api/generate` based on the UI selection.
 - [x] Securely configure `getimg.ai` API key (env var).
-- [ ] Implement the backend logic within `/api/generate` for the "Generate New Images" path:
+- [x] Implement the backend logic within `/api/generate` for the "Generate New Images" path:
   - Extract descriptions from product image placeholders.
   - Implement parallelized API calls to `getimg.ai` text-to-image endpoint.
   - Handle `getimg.ai` API responses (success and basic errors).
