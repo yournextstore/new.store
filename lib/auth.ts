@@ -46,7 +46,7 @@ export const auth = betterAuth({
 		},
 	},
 	user: {
-		modelName: "users2s",
+		modelName: "users",
 	},
 
 	databaseHooks: {

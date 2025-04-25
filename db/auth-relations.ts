@@ -5,20 +5,20 @@ import {
 	members,
 	organizations,
 	sessions,
-	users2s,
+	users,
 } from "./auth-schema";
 
-export const users2Relations = relations(users2s, ({ many }) => ({
+export const users2Relations = relations(users, ({ many }) => ({
 	sessions: many(sessions),
 	accounts: many(accounts),
 	members: many(members),
 	invitations: many(invitations),
 }));
 export const sessionRelations = relations(sessions, ({ one }) => ({
-	user: one(users2s, { references: [users2s.id], fields: [sessions.userId] }),
+	user: one(users, { references: [users.id], fields: [sessions.userId] }),
 }));
 export const accountsRelations = relations(accounts, ({ one }) => ({
-	user: one(users2s, { references: [users2s.id], fields: [accounts.userId] }),
+	user: one(users, { references: [users.id], fields: [accounts.userId] }),
 }));
 export const organizationsRelations = relations(
 	organizations,
@@ -32,15 +32,15 @@ export const membersRelations = relations(members, ({ one }) => ({
 		references: [organizations.id],
 		fields: [members.organizationId],
 	}),
-	user: one(users2s, { references: [users2s.id], fields: [members.userId] }),
+	user: one(users, { references: [users.id], fields: [members.userId] }),
 }));
 export const invitationsRelations = relations(invitations, ({ one }) => ({
 	organizations: one(organizations, {
 		references: [organizations.id],
 		fields: [invitations.organizationId],
 	}),
-	inviter: one(users2s, {
-		references: [users2s.id],
+	inviter: one(users, {
+		references: [users.id],
 		fields: [invitations.inviterId],
 	}),
 }));
