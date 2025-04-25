@@ -276,6 +276,9 @@ importers:
       '@types/pg':
         specifier: ^8.11.14
         version: 8.11.14
+      '@types/pg-types':
+        specifier: ^2.2.0
+        version: 2.2.0
       '@types/react':
         specifier: ^19.1.2
         version: 19.1.2
@@ -2171,6 +2174,10 @@ packages:
 
   '@types/pdf-parse@1.1.4':
     resolution: {integrity: sha512-+gbBHbNCVGGYw1S9lAIIvrHW47UYOhMIFUsJcMkMrzy1Jf0vulBN3XQIjPgnoOXveMuHnF3b57fXROnY/Or7eg==}
+
+  '@types/pg-types@2.2.0':
+    resolution: {integrity: sha512-a+fLdul8OczRvPWPf8eTb6wPhxzyWQwRGhNN0ugtOtk6yFOG53i2LwXaA0d2D6bsJlWxi6eCuGZLGoCcdOlWZA==}
+    deprecated: This is a stub types definition. pg-types provides its own type definitions, so you do not need this installed.
 
   '@types/pg@8.11.14':
     resolution: {integrity: sha512-qyD11E5R3u0eJmd1lB0WnWKXJGA7s015nyARWljfz5DcX83TKAIlY+QrmvzQTsbIe+hkiFtkyL2gHC6qwF6Fbg==}
@@ -6360,6 +6367,10 @@ snapshots:
       '@types/node': 22.13.10
 
   '@types/pdf-parse@1.1.4': {}
+
+  '@types/pg-types@2.2.0':
+    dependencies:
+      pg-types: 4.0.2
 
   '@types/pg@8.11.14':
     dependencies:
