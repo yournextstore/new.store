@@ -4,7 +4,7 @@ import { openai } from '@ai-sdk/openai';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { Pool } from 'pg';
-import { callGetImgApi } from '../../lib/getimg-api'; // Import the helper
+import { generateAndUploadPlaceholders } from '../../lib/image-generation';
 
 // --- Constants & Types ---
 const EMBEDDING_MODEL = openai.embedding('text-embedding-3-small');
@@ -160,44 +160,6 @@ async function findImageInDB(
   return bestMatchUrl;
 }
 
-// --- NEW HELPER FUNCTION for getimg.ai ---
-/**
- * Calls the getimg.ai API for a list of placeholders concurrently and logs results.
- * This function does not modify the JSON, it only performs the API calls for logging.
- */
-async function generateAndLogImagesWithGetImgAI(
-  placeholders: { originalUrl: string; description: string }[],
-): Promise<void> {
-  if (!placeholders || placeholders.length === 0) {
-    return; // Nothing to do
-  }
-
-  console.log(
-    `[getimg.ai] Starting generation for ${placeholders.length} product images...`,
-  );
-
-  // TODO: Implement concurrency limiting (e.g., p-limit) if needed.
-  const generationPromises = placeholders.map(async (p) => {
-    const imageUrl = await callGetImgApi(p.description);
-    // Logging is handled within callGetImgApi
-    // We don't need to return/use the URL here in this phase
-  });
-
-  // Wait for all API calls to settle (complete or fail)
-  const results = await Promise.allSettled(generationPromises);
-
-  const successfulGenerations = results.filter(
-    (r) => r.status === 'fulfilled',
-  ).length;
-  const failedGenerations = results.length - successfulGenerations;
-
-  console.log(
-    `[getimg.ai] Generation finished. Success: ${successfulGenerations}, Failed/Timeout: ${failedGenerations}`,
-  );
-  // No return value needed, side effect is logging
-}
-// --- END NEW HELPER FUNCTION ---
-
 /**
  * Recursively traverses a JSON object/array and replaces image placeholder URLs
  * (matching `https://yns.img?description=...`) with URLs found via DB similarity search.
@@ -288,9 +250,6 @@ async function replaceImagePlaceholders(
 
             // Handle single or multi-slide structure
             if (Array.isArray(section.data?.slides)) {
-              // console.log(
-              //   `Processing HeroSection (Multi-slide) in path: ${pathKey}`,
-              // );
               const slidePromises = section.data.slides.map(processSlide);
               await Promise.allSettled(slidePromises); // Process slides concurrently
             } else if (section.data?.image) {
@@ -385,9 +344,19 @@ async function replaceImagePlaceholders(
     // Wait for all product stock lookups/parsing to complete
     await Promise.allSettled(productProcessingPromises);
 
-    // --- Execute Generation Calls (if any) --- <<< ADDED BLOCK
+    // --- Execute Generation Calls (if any) ---
     if (productPlaceholdersToGenerate.length > 0) {
-      await generateAndLogImagesWithGetImgAI(productPlaceholdersToGenerate);
+      const generationResults = await generateAndUploadPlaceholders(
+        productPlaceholdersToGenerate,
+      );
+
+      // Create a map for easy lookup of product references
+      const productRefMap = new Map(
+        productPlaceholdersToGenerate.map((item) => [
+          item.originalUrl,
+          item.productRef,
+        ]),
+      );
 
       // After awaiting the logging, set all generated product images to fallback
       for (const item of productPlaceholdersToGenerate) {
@@ -397,7 +366,7 @@ async function replaceImagePlaceholders(
         `[Generate Mode] Set ${productPlaceholdersToGenerate.length} product image URLs to fallback: ${FALLBACK_IMAGE_URL}`,
       );
     }
-    // --- End Generation Calls --- <<< ADDED BLOCK
+    // --- End Generation Calls ---
   }
 
   // Log overall statistics
