@@ -346,6 +346,7 @@ async function replaceImagePlaceholders(
 
     // --- Execute Generation Calls (if any) ---
     if (productPlaceholdersToGenerate.length > 0) {
+      // Call the refactored utility function
       const generationResults = await generateAndUploadPlaceholders(
         productPlaceholdersToGenerate,
       );
@@ -358,13 +359,27 @@ async function replaceImagePlaceholders(
         ]),
       );
 
-      // After awaiting the logging, set all generated product images to fallback
-      for (const item of productPlaceholdersToGenerate) {
-        item.productRef.imageUrl = FALLBACK_IMAGE_URL;
+      // Update the JSON with the results
+      for (const result of generationResults) {
+        const productRef = productRefMap.get(result.originalUrl);
+        if (productRef) {
+          productRef.imageUrl = result.blobUrl ?? FALLBACK_IMAGE_URL; // Use Blob URL or fallback
+          if (!result.blobUrl) {
+            console.warn(
+              `[Generate Mode] Failed to generate/upload image for placeholder ${result.originalUrl}. Using fallback.`,
+            );
+          } else {
+            console.log(
+              `[Generate Mode] Successfully processed image for ${result.originalUrl}. Final URL: ${result.blobUrl}`,
+            );
+          }
+        } else {
+          // This shouldn't happen if the map is built correctly
+          console.error(
+            `[Generate Mode] Could not find product reference for original URL: ${result.originalUrl}`,
+          );
+        }
       }
-      console.log(
-        `[Generate Mode] Set ${productPlaceholdersToGenerate.length} product image URLs to fallback: ${FALLBACK_IMAGE_URL}`,
-      );
     }
     // --- End Generation Calls ---
   }
