@@ -173,7 +173,9 @@ async function replaceImagePlaceholders(
   imageMode: 'stock' | 'generate',
 ): Promise<any> {
   let totalPlaceholders = 0;
-  let successfulMatches = 0; // Tracks successful DB lookups primarily
+  let successfulMatches = 0;
+  let generationAttempted = 0;
+  let generationSucceeded = 0;
   const productPlaceholdersToGenerate: {
     originalUrl: string;
     description: string;
@@ -307,6 +309,7 @@ async function replaceImagePlaceholders(
                 description: description,
                 productRef: product, // Keep reference to modify later
               });
+              generationAttempted++;
               // NOTE: We don't set fallback URL here yet. It's done after all generation calls.
             } else {
               // --- STOCK PATH (Existing DB Lookup) ---
@@ -369,6 +372,7 @@ async function replaceImagePlaceholders(
               `[Generate Mode] Failed to generate/upload image for placeholder ${result.originalUrl}. Using fallback.`,
             );
           } else {
+            generationSucceeded++;
             console.log(
               `[Generate Mode] Successfully processed image for ${result.originalUrl}. Final URL: ${result.blobUrl}`,
             );
@@ -386,12 +390,28 @@ async function replaceImagePlaceholders(
 
   // Log overall statistics
   if (totalPlaceholders > 0) {
-    const successRate = ((successfulMatches / totalPlaceholders) * 100).toFixed(
-      2,
-    );
-    console.log(
-      `Image Placeholder Stats: Processed=${totalPlaceholders}, DB Matched=${successfulMatches}, Success Rate=${successRate}%`,
-    );
+    console.log('--- Image Placeholder Stats ---');
+    console.log(`Total Placeholders Found: ${totalPlaceholders}`);
+    if (generationAttempted > 0) {
+      // Log detailed stats for generation mode
+      const dbLookupsAttempted = totalPlaceholders - generationAttempted;
+      console.log(
+        `  DB Lookups (Hero/Other): Attempted=${dbLookupsAttempted}, Matched=${successfulMatches}`,
+      );
+      console.log(
+        `  Generation (Product):   Attempted=${generationAttempted}, Succeeded=${generationSucceeded}`,
+      );
+    } else {
+      // Log simpler stats for stock mode
+      const successRate = (
+        (successfulMatches / totalPlaceholders) *
+        100
+      ).toFixed(2);
+      console.log(
+        `  DB Lookups: Matched=${successfulMatches} / ${totalPlaceholders} (${successRate}%)`,
+      );
+    }
+    console.log('-----------------------------');
   } else {
     console.log('Image Placeholder Stats: No placeholders found to process.');
   }
