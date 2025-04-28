@@ -790,9 +790,9 @@ This plan outlines the development tasks for the Database Migration, On-Demand I
 - [x] Implement image download from `getimg.ai` URL.
 - [x] Implement image upload to Vercel Blob, including storing the prompt as metadata.
 - [x] Incorporate getimg.ai returned image URL into the store JSON representation using the Vercel Blob URL.
-- [ ] **Implement logic to generate embedding and insert the new image record (Blob URL, prompt, description, embedding, source='generated') into the PostgreSQL `images` table.**
-- [ ] Test the end-to-end flow for on-demand image generation with various prompts, verifying database insertion.
-- [ ] Refine error handling for `getimg.ai` integration and database insertion based on testing.
+- [x] **Implement logic to generate embedding and insert the new image record (Blob URL, prompt, description, embedding, source='generated') into the PostgreSQL `images` table.**
+- [x] Test the end-to-end flow for on-demand image generation with various prompts, verifying database insertion.
+- [x] Refine error handling for `getimg.ai` integration and database insertion based on testing.
 - [ ] *(Optional)* Implement status streaming for the generation process.
 
 #### 8.4.3 Internal Image Library Viewer
