@@ -1,5 +1,3 @@
-import { NextResponse } from 'next/server';
-
 const GETIMG_API_KEY = process.env.GETIMG_API_KEY;
 const GETIMG_ENDPOINT = 'https://api.getimg.ai/v1/flux-schnell/text-to-image';
 const API_TIMEOUT_MS = 10000; // 10 seconds
