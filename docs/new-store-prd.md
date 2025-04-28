@@ -775,7 +775,7 @@ This plan outlines the development tasks for the Database Migration, On-Demand I
             - Instead, filter using the new column: `WHERE image_type = 'product'` or `WHERE image_type = 'hero'`.
             - The `layout_hint` check will still be needed for hero images.
         - [x] Test the end-to-end `/api/generate` flow to ensure product and hero images are correctly identified and selected using the new `image_type` column.
-- [ ] Create necessary database indexes (e.g., HNSW on embeddings).
+- [x] Create necessary database indexes (e.g., HNSW on embeddings).
 
 #### 8.4.2 On-Demand Product Image Generation (getimg.ai)
 - [ ] *(Prerequisite: 8.4.1 Complete)*
