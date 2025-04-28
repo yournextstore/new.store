@@ -1,3 +1,10 @@
+/**
+ * Database connection and Drizzle ORM setup specifically for handling AUTHENTICATION.
+ * This connects to a SEPARATE Neon database instance (using DATABASE_URL)
+ * primarily used for user authentication data, distinct from the main application database
+ * connected via lib/db.ts (using POSTGRES_URL).
+ * It uses the serverless driver for compatibility with environments like Vercel.
+ */
 import { invariant } from '@/lib/utils';
 import { Pool, neonConfig } from '@neondatabase/serverless';
 import { loadEnvConfig } from '@next/env';
