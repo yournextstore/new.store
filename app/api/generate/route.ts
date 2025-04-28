@@ -3,7 +3,7 @@ import { generateText, cosineSimilarity, embed } from 'ai';
 import { openai } from '@ai-sdk/openai';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { Pool } from 'pg';
+import { pool } from '@/lib/db';
 import { generateAndUploadPlaceholders } from '../../lib/image-generation';
 
 // --- Constants & Types ---
@@ -11,35 +11,6 @@ const EMBEDDING_MODEL = openai.embedding('text-embedding-3-small');
 const SIMILARITY_THRESHOLD = 0.45; // Adjust as needed
 const FALLBACK_IMAGE_URL = 'https://via.placeholder.com/300'; // Use a generic placeholder URL if no match found
 const COSINE_DISTANCE_THRESHOLD = 1 - SIMILARITY_THRESHOLD; // pgvector uses distance
-
-// --- Database Connection ---
-let pool: Pool;
-try {
-  if (!process.env.POSTGRES_URL) {
-    throw new Error('POSTGRES_URL environment variable is not set.');
-  }
-  pool = new Pool({
-    connectionString: process.env.POSTGRES_URL,
-    // Add SSL config if needed for Neon or other providers
-    // ssl: { rejectUnauthorized: false } // Example for Neon, adjust as necessary
-  });
-
-  // Test connection on initialization (optional but recommended)
-  pool
-    .query('SELECT NOW()')
-    .then(() => {
-      console.log('Database pool connected successfully.');
-    })
-    .catch((err) => {
-      console.error('Database pool connection failed:', err);
-      // Depending on requirements, you might want to throw or handle differently
-    });
-} catch (error) {
-  console.error('Failed to initialize database pool:', error);
-  // Handle critical initialization error - maybe the app can't run without DB?
-  // For now, log the error. The absence of the pool will cause errors later.
-  pool = null as any; // Set pool to null/invalid state if init fails
-}
 
 // --- New Database Query Function ---
 async function findImageInDB(
