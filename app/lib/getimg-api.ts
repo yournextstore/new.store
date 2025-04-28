@@ -27,9 +27,7 @@ export async function callGetImgApi(prompt: string): Promise<string | null> {
   const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
 
   try {
-    console.log(
-      `[getimg.ai] Calling API for prompt: "${prompt.substring(0, 70)}..."`,
-    );
+    console.log(`[getimg.ai] Calling API for prompt: "${prompt}"`);
     const response = await fetch(GETIMG_ENDPOINT, {
       method: 'POST',
       headers: {
@@ -68,7 +66,7 @@ export async function callGetImgApi(prompt: string): Promise<string | null> {
 
     if (typeof imageUrl === 'string' && imageUrl.length > 0) {
       console.log(
-        `[getimg.ai] Success: Received image URL for prompt "${prompt.substring(0, 70)}..."`,
+        `[getimg.ai] Success: Received image URL for prompt "${prompt}"`,
       );
       console.log(`[getimg.ai] URL: ${imageUrl}`);
       return imageUrl;
@@ -83,7 +81,7 @@ export async function callGetImgApi(prompt: string): Promise<string | null> {
     clearTimeout(timeoutId); // Clear timeout if fetch fails for other reasons
     if (error.name === 'AbortError') {
       console.error(
-        `[getimg.ai] API call timed out after ${API_TIMEOUT_MS}ms for prompt: "${prompt.substring(0, 70)}..."`,
+        `[getimg.ai] API call timed out after ${API_TIMEOUT_MS}ms for prompt: "${prompt}"`,
       );
     } else {
       console.error(`[getimg.ai] Failed to call API:`, error);
