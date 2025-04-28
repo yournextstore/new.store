@@ -1,6 +1,6 @@
 import "server-only";
 
-import { db, schema } from "@/db/db";
+import { db, schema } from "@/db/auth-db";
 import bcrypt from "bcryptjs";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
