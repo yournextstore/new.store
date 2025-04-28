@@ -9,7 +9,7 @@ import cliProgress from 'cli-progress';
 import Table from 'cli-table3';
 import { put } from '@vercel/blob';
 import pLimit from 'p-limit';
-import pg, { Pool } from 'pg';
+import { Pool } from 'pg';
 import type { PoolClient } from 'pg';
 
 // Load environment variables from .env file
