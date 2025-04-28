@@ -1,6 +1,8 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { pool } from '@/lib/db'; // Assuming db connection pool is exported from here
 import { z } from 'zod';
+import { auth } from '@/lib/auth'; // Import auth
+import { headers } from 'next/headers'; // Import headers
 
 // Schema for validating query parameters
 const searchParamsSchema = z.object({
@@ -46,6 +48,12 @@ function buildWhereClause(params: z.infer<typeof searchParamsSchema>): {
 }
 
 export async function GET(request: NextRequest) {
+  // Check session first
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session?.user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   try {
     const { searchParams } = new URL(request.url);
 

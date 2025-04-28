@@ -806,7 +806,7 @@ _An internal tool in the spirit of admin UI like in Django or Rails._
 - [x] Implement UI elements: search bar, image grid/list display, pagination controls.
 - [x] Implement frontend logic to call the search API route (with debouncing) and display results.
 - [x] Implement pagination logic on the frontend.
-- [ ] Integrate access control using the existing auth mechanism to restrict the page to authorized users.
+- [x] Integrate access control using the existing auth mechanism to restrict the page to authorized users.
 - [ ] Test the library viewer functionality, including search and pagination, verifying it correctly displays data from the database (both static and potentially generated images if 8.4.2 is also complete).
 - [ ] *(Optional)* Implement similarity search for the library viewer.
 - [ ] *(Optional)* Implement advanced filtering/sorting.
