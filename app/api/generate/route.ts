@@ -72,18 +72,19 @@ async function findImageInDB(
           console.warn('Hero image search called without alignment. Skipping.');
           return null;
         }
-        // Query 1: Alignment + Threshold
+        // Query 1: Image Type + Alignment + Threshold
         const query1 = `
           SELECT blob_url
           FROM images
-          WHERE filename LIKE '%-hero-%' -- Use filename convention
-            AND layout_hint = $1
+          WHERE image_type = $1 -- Use explicit type column
+            AND layout_hint = $2
             AND source = 'static' -- Ensure it's from the library build
-            AND embedding <=> $2::vector < $3
-          ORDER BY embedding <=> $2::vector ASC
+            AND embedding <=> $3::vector < $4
+          ORDER BY embedding <=> $3::vector ASC
           LIMIT 1;
         `;
         const result1 = await client.query(query1, [
+          imageType, // Pass 'hero'
           alignment,
           embeddingString,
           COSINE_DISTANCE_THRESHOLD,
@@ -92,48 +93,52 @@ async function findImageInDB(
         if (result1.rows.length > 0) {
           bestMatchUrl = result1.rows[0].blob_url;
           console.log(
-            `DB Hero Match (Align + Threshold): Found ${bestMatchUrl} for alignment ${alignment}`,
+            `DB Hero Match (Type+Align+Thresh): Found ${bestMatchUrl} for alignment ${alignment}`,
           );
         } else {
-          // Query 2: Alignment Only (Fallback 1)
+          // Query 2: Image Type + Alignment Only (Fallback 1)
           console.log(
-            `DB Hero Fallback 1: Searching alignment "${alignment}" without threshold...`,
+            `DB Hero Fallback 1: Searching type "${imageType}" alignment "${alignment}" without threshold...`,
           );
           const query2 = `
             SELECT blob_url
             FROM images
-            WHERE filename LIKE '%-hero-%' -- Use filename convention
-              AND layout_hint = $1
+            WHERE image_type = $1 -- Use explicit type column
+              AND layout_hint = $2
               AND source = 'static' -- Ensure it's from the library build
-            ORDER BY embedding <=> $2::vector ASC
+            ORDER BY embedding <=> $3::vector ASC
             LIMIT 1;
           `;
           const result2 = await client.query(query2, [
+            imageType, // Pass 'hero'
             alignment,
             embeddingString,
           ]);
           if (result2.rows.length > 0) {
             bestMatchUrl = result2.rows[0].blob_url;
             console.log(
-              `DB Hero Match (Align Only): Found ${bestMatchUrl} for alignment ${alignment}`,
+              `DB Hero Match (Type+Align Only): Found ${bestMatchUrl} for alignment ${alignment}`,
             );
           } else {
             console.log(
-              `DB Hero Fallback 2: No match found for alignment "${alignment}" even without threshold.`,
+              `DB Hero Fallback 2: No match found for type "${imageType}" alignment "${alignment}".`,
             );
+            // Fallback 3: Maybe just find *any* hero image matching description?
+            // Consider adding another fallback layer if needed.
           }
         }
       } else if (imageType === 'product') {
         const query = `
           SELECT blob_url
           FROM images
-          WHERE blob_pathname LIKE 'library/%/products/%' -- Match product paths with intermediate dir
+          WHERE image_type = $1 -- Use explicit type column
             AND source = 'static' -- Ensure it's from the library build
-            AND embedding <=> $1::vector < $2
-          ORDER BY embedding <=> $1::vector ASC
+            AND embedding <=> $2::vector < $3
+          ORDER BY embedding <=> $2::vector ASC
           LIMIT 1;
         `;
         const result = await client.query(query, [
+          imageType, // Pass 'product'
           embeddingString,
           COSINE_DISTANCE_THRESHOLD,
         ]);
@@ -144,6 +149,7 @@ async function findImageInDB(
           console.log(
             `DB Product Match: No suitable match found below threshold for description "${description.substring(0, 50)}..."`,
           );
+          // Consider fallback for products too? (e.g., ignore threshold)
         }
       }
     } finally {

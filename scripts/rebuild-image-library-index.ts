@@ -122,6 +122,7 @@ interface DbImageData {
   shortName: string | null; // TEXT, nullable
   blob_pathname: string; // TEXT NOT NULL
   layout_hint: 'left' | 'right' | 'center' | null; // TEXT, nullable CHECK
+  image_type: 'product' | 'hero' | null; // TEXT, nullable
   source: string; // TEXT NOT NULL ('static', 'getimg.ai', etc.)
   created_at: Date; // TIMESTAMP WITH TIME ZONE NOT NULL
   // Keep relative path from /public for mapping/comparison, but not in DB
@@ -214,7 +215,12 @@ async function generateNewImageData(
 ): Promise<
   Omit<
     DbImageData,
-    'id' | 'created_at' | 'relativePath' | 'layout_hint' | 'source'
+    | 'id'
+    | 'created_at'
+    | 'relativePath'
+    | 'layout_hint'
+    | 'source'
+    | 'image_type'
   >
 > {
   // --- Vercel Blob Upload ---
@@ -270,6 +276,30 @@ async function generateNewImageData(
     filename: filename, // Include filename
     // layout_hint and source will be set during DB operation
   };
+}
+
+/**
+ * Determines the image type based on filename and path conventions.
+ * @param relativePath Relative path from the PUBLIC directory (e.g., images/library/...)
+ * @param filename The base filename (e.g., image-hero-left.jpg)
+ * @returns 'hero' or 'product'.
+ */
+function determineImageType(
+  relativePath: string,
+  filename: string,
+): 'product' | 'hero' {
+  // Check for hero pattern in filename first (case-insensitive)
+  if (filename.match(/-hero-/i)) {
+    return 'hero';
+  }
+  // Check for product path pattern (using POSIX separators assumed from relativePath)
+  // Matches 'images/library/ANYTHING/products/REST_OF_PATH'
+  const productPathRegex = /^images\/library\/[^/]+\/products\//;
+  if (relativePath.match(productPathRegex)) {
+    return 'product';
+  }
+  // Default to product if neither pattern matches
+  return 'product';
 }
 
 // --- Main Execution ---
@@ -388,6 +418,7 @@ async function main() {
           relativeToLibrary,
         );
         const layoutHint = determineLayoutHint(filename); // Function to determine hint from filename
+        const imageType = determineImageType(relativeToPublic, filename); // Determine image type
 
         if (existingData && existingData.hash === currentHash) {
           // Content is the same
@@ -409,13 +440,14 @@ async function main() {
             // 2. Update Database Record
             await dbClient.query(
               `UPDATE images
-               SET blob_url = $1, blob_pathname = $2, filename = $3, layout_hint = $4
-               WHERE id = $5`, // Use ID to reliably update the correct record
+               SET blob_url = $1, blob_pathname = $2, filename = $3, layout_hint = $4, image_type = $5
+               WHERE id = $6`, // Use ID to reliably update the correct record
               [
                 blob.url,
                 expectedBlobPathname,
                 filename,
                 layoutHint,
+                imageType,
                 existingData.id,
               ],
             );
@@ -449,9 +481,9 @@ async function main() {
           const upsertQuery = `
             INSERT INTO images (
               blob_url, description, embedding, hash, filename, shortName,
-              blob_pathname, layout_hint, source, created_at
+              blob_pathname, layout_hint, image_type, source, created_at
             ) VALUES (
-              $1, $2, $3, $4, $5, $6, $7, $8, $9, NOW()
+              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW()
             )
             ON CONFLICT (blob_pathname) DO UPDATE SET
               blob_url = EXCLUDED.blob_url,
@@ -461,6 +493,7 @@ async function main() {
               filename = EXCLUDED.filename,
               shortName = EXCLUDED.shortName,
               layout_hint = EXCLUDED.layout_hint,
+              image_type = EXCLUDED.image_type,
               source = EXCLUDED.source;
             -- RETURNING id; -- Optionally return id if needed later
           `;
@@ -474,7 +507,8 @@ async function main() {
             newData.shortName,
             newData.blob_pathname,
             layoutHint,
-            'static', // Source is 'static' for this script
+            imageType,
+            'static', // Source is 'static' for library builds
           ]);
 
           const status: 'Added' | 'Updated' = existingData

@@ -761,20 +761,20 @@ This plan outlines the development tasks for the Database Migration, On-Demand I
 - [x] Run the modified `scripts/rebuild-image-library-index.ts` script for the initial data migration, populating the `images` table from the current local library.
 - [ ] Refactor the `/api/generate` route's image selection logic to query the database using `node-postgres` and `pgvector` instead of loading `library.json`.
 - [x] Test the existing image selection flow thoroughly to ensure it works correctly with the database backend.
-- [ ] **Migrate image type identification from convention to explicit DB column**
+- [x] **Migrate image type identification from convention to explicit DB column**
     - **Context:** Our debugging revealed that identifying images as 'product' or 'hero' currently relies on fragile string matching within file paths (`blob_pathname LIKE 'library/%/products/%'`) or filenames (`filename LIKE '%-hero-%'`). This required fixes in the querying logic (`/api/generate/route.ts`) and makes the system less robust and harder to maintain.
     - **Goal:** Introduce an explicit `image_type` column (e.g., TEXT) to the `images` table to store whether an image is intended as a 'product' or 'hero' image (or potentially other types in the future). This will make querying more direct and less error-prone.
     - **Subtasks:**
-        - [ ] Add `image_type TEXT` column to the `images` table schema in PostgreSQL. (Consider adding a `CHECK (image_type IN ('product', 'hero'))` constraint).
-        - [ ] Modify `scripts/rebuild-image-library-index.ts`:
+        - [x] Add `image_type TEXT` column to the `images` table schema in PostgreSQL. (Consider adding a `CHECK (image_type IN ('product', 'hero'))` constraint).
+        - [x] Modify `scripts/rebuild-image-library-index.ts`:
             - When processing an image, determine its type based on the *current* conventions (e.g., if `blob_pathname` matches `library/%/products/%` -> 'product', if `filename` contains `-hero-` -> 'hero', default could be 'product' or null/other).
             - Store the determined type in the new `image_type` column during the `INSERT` or `UPDATE` (UPSERT) operation.
-        - [ ] Re-run `scripts/rebuild-image-library-index.ts` to populate the `image_type` for all existing images in the database.
-        - [ ] Refactor `/api/generate/route.ts` (`findImageInDB` function):
+        - [x] Re-run `scripts/rebuild-image-library-index.ts` to populate the `image_type` for all existing images in the database.
+        - [x] Refactor `/api/generate/route.ts` (`findImageInDB` function):
             - Remove the `LIKE` clauses on `blob_pathname` and `filename` used for type detection.
             - Instead, filter using the new column: `WHERE image_type = 'product'` or `WHERE image_type = 'hero'`.
             - The `layout_hint` check will still be needed for hero images.
-        - [ ] Test the end-to-end `/api/generate` flow to ensure product and hero images are correctly identified and selected using the new `image_type` column.
+        - [x] Test the end-to-end `/api/generate` flow to ensure product and hero images are correctly identified and selected using the new `image_type` column.
 - [ ] Create necessary database indexes (e.g., HNSW on embeddings).
 
 #### 8.4.2 On-Demand Product Image Generation (getimg.ai)

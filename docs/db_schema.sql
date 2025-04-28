@@ -14,6 +14,8 @@ CREATE TABLE images (
     blob_pathname TEXT NOT NULL UNIQUE, -- Pathname used in Vercel Blob, ADDED UNIQUE constraint
     -- Specific to certain image types (e.g., hero images), NULL otherwise
     layout_hint TEXT CHECK (layout_hint IN ('left', 'right', 'center')),
+    -- Type of image ('product' or 'hero')
+    image_type TEXT, -- Can add CHECK constraint later if needed
     -- 'static' or the name of the generation service (e.g., 'getimg.ai')
     source TEXT NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
