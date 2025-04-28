@@ -796,14 +796,16 @@ This plan outlines the development tasks for the Database Migration, On-Demand I
 - [ ] *(Optional)* Implement status streaming for the generation process.
 
 #### 8.4.3 Internal Image Library Viewer
-- [ ] *(Prerequisite: 8.4.1 Complete)*
-- [ ] Create the backend API route (`app/api/dev/image-library/search/route.ts`).
-- [ ] Implement database connection logic in the API route.
-- [ ] Implement API logic to query the `images` table based on text search and pagination parameters.
-- [ ] Create the frontend page component for the viewer (`/dev/image-library/page.tsx`).
-- [ ] Implement UI elements: search bar, image grid/list display, pagination controls.
-- [ ] Implement frontend logic to call the search API route (with debouncing) and display results.
-- [ ] Implement pagination logic on the frontend.
+_An internal tool in the spirit of admin UI like in Django or Rails._
+
+- [x] *(Prerequisite: 8.4.1 Complete)*
+- [x] Create the backend API route (`app/api/dev/image-library/search/route.ts`).
+- [x] Implement database connection logic in the API route.
+- [x] Implement API logic to query the `images` table based on text search and pagination parameters.
+- [x] Create the frontend page component for the viewer (`/dev/image-library/page.tsx`).
+- [x] Implement UI elements: search bar, image grid/list display, pagination controls.
+- [x] Implement frontend logic to call the search API route (with debouncing) and display results.
+- [x] Implement pagination logic on the frontend.
 - [ ] Integrate access control using the existing auth mechanism to restrict the page to authorized users.
 - [ ] Test the library viewer functionality, including search and pagination, verifying it correctly displays data from the database (both static and potentially generated images if 8.4.2 is also complete).
 - [ ] *(Optional)* Implement similarity search for the library viewer.
