@@ -114,7 +114,19 @@ export async function GET(request: NextRequest) {
       imageQueryParams.push(offset); // Add offset param
 
       const imagesQuery = `
-        SELECT *
+        SELECT
+          id,
+          blob_url,
+          description,
+          filename,
+          shortName,
+          layout_hint,
+          image_type,
+          source,
+          generation_prompt,
+          created_at,
+          blob_pathname,
+          hash
         FROM images
         ${whereClause}
         ORDER BY created_at DESC
