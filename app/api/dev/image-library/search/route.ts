@@ -48,9 +48,14 @@ function buildWhereClause(params: z.infer<typeof searchParamsSchema>): {
 }
 
 export async function GET(request: NextRequest) {
+  console.time('total_request_time'); // Start total timer
+
   // Check session first
+  console.time('auth_getSession');
   const session = await auth.api.getSession({ headers: await headers() });
+  console.timeEnd('auth_getSession');
   if (!session?.user) {
+    console.timeEnd('total_request_time'); // End timer on error
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -82,12 +87,15 @@ export async function GET(request: NextRequest) {
     // --- Database Interaction ---
     if (!pool) {
       console.error('Database pool is not initialized.');
+      console.timeEnd('total_request_time'); // End timer on error
       return NextResponse.json(
         { error: 'Database connection error' },
         { status: 500 },
       );
     }
+    console.time('db_connect');
     const client = await pool.connect();
+    console.timeEnd('db_connect');
 
     try {
       // Build dynamic WHERE clause and parameters
@@ -95,7 +103,9 @@ export async function GET(request: NextRequest) {
 
       // --- Query 1: Get Total Count ---
       const countQuery = `SELECT COUNT(*) FROM images ${whereClause}`;
+      console.time('db_count_query');
       const countResult = await client.query(countQuery, queryParams);
+      console.timeEnd('db_count_query');
       const totalCount = Number.parseInt(countResult.rows[0].count, 10);
 
       // --- Query 2: Get Paginated Images ---
@@ -111,21 +121,27 @@ export async function GET(request: NextRequest) {
         LIMIT $${queryParams.length + 1}
         OFFSET $${queryParams.length + 2}
       `;
+      console.time('db_images_query');
       const imagesResult = await client.query(imagesQuery, imageQueryParams);
+      console.timeEnd('db_images_query');
       const images = imagesResult.rows;
 
       // --- Return Response ---
+      console.timeEnd('total_request_time'); // End timer before returning success
       return NextResponse.json({
         images,
         totalCount,
       });
     } finally {
+      console.time('db_release');
       client.release(); // Ensure client is always released
+      console.timeEnd('db_release');
     }
   } catch (error) {
     console.error('Error fetching image library:', error);
     const message =
       error instanceof Error ? error.message : 'Unknown server error';
+    console.timeEnd('total_request_time'); // End timer on error
     return NextResponse.json(
       { error: 'Failed to fetch image library', details: message },
       { status: 500 },
