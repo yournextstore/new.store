@@ -119,6 +119,7 @@ async function insertImageRecord(data: {
   filename: string;
   shortName: string | null;
   blob_pathname: string;
+  generationPrompt?: string;
 }): Promise<boolean> {
   if (!pool) {
     console.error('[DB Util] Database pool is not available. Cannot insert.');
@@ -129,9 +130,11 @@ async function insertImageRecord(data: {
     const insertQuery = `
       INSERT INTO images (
         blob_url, description, embedding, hash, filename, shortName,
-        blob_pathname, layout_hint, image_type, source, created_at
+        blob_pathname, layout_hint, image_type, source, created_at,
+        generation_prompt
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW()
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(),
+        $11
       );
     `;
     await client.query(insertQuery, [
@@ -145,6 +148,7 @@ async function insertImageRecord(data: {
       null, // layout_hint is null for product images
       'product', // image_type
       'getimg.ai', // source
+      data.generationPrompt,
     ]);
     console.log(`[DB Util] Inserted record for ${data.blob_pathname}`);
     return true;
@@ -257,6 +261,7 @@ Style: suitable for ecommerce site, clean, white background, centered product sh
       filename: filename,
       shortName: shortName,
       blob_pathname: blobResult.pathname, // Use pathname from blob result
+      generationPrompt: modifiedPrompt,
     });
     if (!dbSuccess) {
       throw new Error('Database insertion failed');

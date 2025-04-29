@@ -25,6 +25,7 @@ interface ImageItem {
   image_type: 'product' | 'hero' | null;
   source: string;
   created_at: string;
+  generation_prompt?: string | null;
 }
 
 interface ImageDetailDialogProps {
@@ -75,6 +76,32 @@ export function ImageDetailDialog({
               </h3>
               <p>{image.description}</p>
             </div>
+
+            {/* Add Generation Prompt Section */}
+            {image.generation_prompt && (
+              <div>
+                <h3 className="text-sm font-medium text-muted-foreground mb-1 flex items-center">
+                  Generation Prompt
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-5 w-5 ml-1"
+                    onClick={() =>
+                      copyToClipboard(
+                        image.generation_prompt || '',
+                        'Generation Prompt',
+                      )
+                    }
+                    title="Copy prompt"
+                  >
+                    <Copy className="h-3 w-3" />
+                  </Button>
+                </h3>
+                <p className="text-xs whitespace-pre-wrap break-words font-mono bg-muted p-2 rounded">
+                  {image.generation_prompt}
+                </p>
+              </div>
+            )}
 
             <div className="flex flex-wrap gap-2">
               <Badge

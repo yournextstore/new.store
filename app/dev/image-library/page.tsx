@@ -44,6 +44,7 @@ interface ImageItem {
   image_type: 'product' | 'hero' | null;
   source: string;
   created_at: string;
+  generation_prompt?: string | null;
 }
 
 interface ApiResponse {

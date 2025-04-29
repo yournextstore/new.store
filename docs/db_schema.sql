@@ -18,6 +18,8 @@ CREATE TABLE images (
     image_type TEXT, -- Can add CHECK constraint later if needed
     -- 'static' or the name of the generation service (e.g., 'getimg.ai')
     source TEXT NOT NULL,
+    -- Optional: The modified prompt sent to the generation service
+    generation_prompt TEXT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 
