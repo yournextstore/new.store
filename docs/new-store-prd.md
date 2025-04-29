@@ -797,6 +797,9 @@ This plan outlines the development tasks for the Database Migration, On-Demand I
   - [x] Refine the prompt to prevent image generation from outputting unclean background.
   - [x] Generated product should be centered in the image. It should be a central focus of the image.
   - [x] There should be no text except on labels on the product.
+- [ ] **Persist Modified Prompt:**
+    - [ ] Add a new nullable `generation_prompt TEXT` column to the `images` table schema in PostgreSQL.
+    - [ ] Modify the database insertion logic (e.g., in `insertImageRecord`) to store the `modifiedPrompt` used for `getimg.ai` in the new `generation_prompt` column. This column should only be populated for images where `source` is 'getimg.ai'.
 - [ ] *(Optional)* Implement status streaming for the generation process.
 
 #### 8.4.3 Internal Image Library Viewer
