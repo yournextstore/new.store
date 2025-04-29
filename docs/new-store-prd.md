@@ -793,6 +793,10 @@ This plan outlines the development tasks for the Database Migration, On-Demand I
 - [x] **Implement logic to generate embedding and insert the new image record (Blob URL, prompt, description, embedding, source='generated') into the PostgreSQL `images` table.**
 - [x] Test the end-to-end flow for on-demand image generation with various prompts, verifying database insertion.
 - [x] Refine error handling for `getimg.ai` integration and database insertion based on testing.
+- [x] Refine the prompt engineering for `getimg.ai` to improve image quality and relevance to the store.
+  - [x] Refine the prompt to prevent image generation from outputting unclean background.
+  - [x] Generated product should be centered in the image. It should be a central focus of the image.
+  - [x] There should be no text except on labels on the product.
 - [ ] *(Optional)* Implement status streaming for the generation process.
 
 #### 8.4.3 Internal Image Library Viewer

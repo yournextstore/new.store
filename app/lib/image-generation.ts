@@ -195,8 +195,20 @@ async function processSinglePlaceholder(
   let dbSuccess = false;
 
   try {
-    // 1. Call getimg.ai
-    getimgUrl = await callGetImgApi(placeholder.description);
+    // 1. Log Original Description & Construct Modified Prompt
+    console.log(
+      '[getimg.ai Prompt] Original description:',
+      placeholder.description,
+    );
+    // TODO: Add DB column & logic to persist the modifiedPrompt below (see PRD Task 8.4.2.x)
+    const modifiedPrompt = `Product photo:
+${placeholder.description}
+
+Style: suitable for ecommerce site, clean, white background, centered product shot, no text.`;
+    console.log('[getimg.ai Prompt] Modified prompt:', modifiedPrompt);
+
+    // 2. Call getimg.ai with the MODIFIED prompt
+    getimgUrl = await callGetImgApi(modifiedPrompt);
     if (!getimgUrl) {
       console.warn(
         `[Image Gen Util] Failed getimg.ai call for: ${placeholder.originalUrl}.`,
@@ -204,7 +216,7 @@ async function processSinglePlaceholder(
       throw new Error('getimg.ai call failed');
     }
 
-    // 2. Download Image
+    // 3. Download Image
     downloadResult = await downloadImageFromUrl(getimgUrl);
     if (!downloadResult) {
       throw new Error('Image download failed');
@@ -212,7 +224,7 @@ async function processSinglePlaceholder(
     const { buffer: imageBuffer, filename, contentType } = downloadResult;
     const blobPathname = `generated/${filename}`; // Define Blob pathname
 
-    // 3. Upload to Vercel Blob
+    // 4. Upload to Vercel Blob
     console.log(`[Image Gen Util] Uploading image to: ${blobPathname}...`);
     blobResult = await put(blobPathname, imageBuffer, {
       access: 'public',
@@ -223,20 +235,20 @@ async function processSinglePlaceholder(
       `[Image Gen Util] Upload successful. Blob URL: ${blobResult.url}`,
     );
 
-    // 4. Calculate Hash
+    // 5. Calculate Hash
     imageHash = calculateHash(imageBuffer);
 
-    // 5. Generate Embedding
+    // 6. Generate Embedding
     embedding = await generateImageEmbedding(placeholder.description);
     if (!embedding) {
       throw new Error('Embedding generation failed');
     }
 
-    // 6. Generate Short Name
+    // 7. Generate Short Name
     shortName = await generateShortName(placeholder.description);
     // We proceed even if shortName is null, as it's nullable in DB
 
-    // 7. Insert into Database
+    // 8. Insert into Database
     dbSuccess = await insertImageRecord({
       blob_url: blobResult.url,
       description: placeholder.description,
