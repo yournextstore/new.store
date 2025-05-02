@@ -819,3 +819,110 @@ _An internal tool in the spirit of admin UI like in Django or Rails._
 - [ ] Test the library viewer functionality, including search and pagination, verifying it correctly displays data from the database (both static and potentially generated images if 8.4.2 is also complete).
 - [ ] *(Optional)* Implement similarity search for the library viewer.
 - [ ] *(Optional)* Implement advanced filtering/sorting.
+
+### 8.5 Image Generation Enhancements
+
+#### 8.5.1 Goals & Overview
+
+This workstream focuses on expanding image generation capabilities beyond the initial `getimg.ai` integration. Key goals include:
+- Integrating additional text-to-image generation models (`fal.ai` Flux 1 Pro, OpenAI `gpt-image-1`) as alternatives.
+- Experimenting with techniques (reference images, richer prompts) to improve stylistic consistency across multiple generated product images.
+- Enabling on-demand generation for hero images, addressing layout alignment challenges.
+
+#### 8.5.2 Design Considerations & Rationale
+
+- **Alternative Engines:** Explored `fal.ai` and OpenAI `gpt-image-1` as potential providers offering different capabilities, including potential text+image input support needed for reference images [[1]](https://fal.ai/models/fal-ai/flux-pro/v1.1/api).
+- **Consistency Strategies:** The primary challenge is ensuring stylistic consistency for multiple product images generated for a single store. Two main strategies were identified:
+    - *Reference Images:* Provide a reference image (initially hardcoded) primarily for *stylistic* guidance (lighting, mood, composition), alongside a text prompt describing the desired *product*. Relies on model capabilities (e.g., `fal.ai`'s `image_url` + `image_prompt_strength`; OpenAI `gpt-image-1`'s image input via edit/generations endpoints). Risk: Model might overfit to the reference image's *subject* instead of just its style.
+    - *Richer Prompts:* Replace the current simple prompt structure (basic description + boilerplate style) with a significantly more detailed, structured text prompt. This aims to provide enough explicit textual detail about visual elements, lighting, and composition to achieve consistency without a reference image.
+      - *Current Prompt Structure Example (for `getimg.ai`):*
+        ```
+        Product photo:
+A jar of rejuvenating night cream with retinol and peptides, in a soft pastel and gold design.
+
+Style: suitable for ecommerce site, clean, white background, centered product shot, no text.
+        ```
+      - *Richer Prompt Example (Tested with Flux 1.1 Pro):*
+        ```
+A minimalist, low-top casual sneaker displayed in perfect profile against a plain, light gray or off-white studio background. The shoe is lavender in color with a smooth, tightly woven knit textile upper and a matte finish. It has a clean, seamless silhouette with no logos or decorative elements, emphasizing simplicity and modern design.
+
+The sneaker features black metal eyelets and matching lavender-colored laces, with a soft, slightly padded tongue integrated smoothly into the upper. The sole is thick, rounded, and made from smooth white rubber or EVA, curving gently at the toe and heel for a contemporary, ergonomic look.
+
+The shoe is the only object in the frame, centered horizontally, with soft, diffused lighting that casts a gentle shadow beneath it. The visual style is clean, calm, and modern — ideal for premium ecommerce display.
+        ```
+      - *(Note: The richer prompt example showed promising results in initial tests with Flux 1.1 Pro, but further evaluation is needed across different products and models.)*
+- **Iterative Approach ("Walking Skeleton"):** To manage complexity and risk, development will proceed iteratively:
+    1.  Integrate new engines (`fal.ai`, OpenAI) for basic text-to-image generation for *products* only.
+    2.  Explicitly test and compare the two consistency strategies (Reference Images vs. Richer Prompts) for *product* images.
+    3.  Address hero image generation, including alignment challenges, *after* product generation and consistency are better understood.
+- **UI:** For initial development and testing, the UI will be updated to provide explicit selection between the four modes (Stock, `getimg.ai`, `fal.ai`, OpenAI), controlling generation for applicable image types (initially products, later heroes). A more refined UI is deferred.
+
+#### 8.5.3 Implementation Plan
+
+*(Phases focus on iteratively building end-to-end functionality and testing hypotheses)*
+
+**Phase 1: Walking Skeleton - Add New Engines for *Product* Images (Text-to-Image)**
+- [ ] Task: Implement UI for Generation Mode Selection (4 modes: Stock, getimg, falai, openai). *(Frontend change)*
+- [ ] Task: Integrate `fal.ai` API (Backend for **Text-to-Image Only**).
+    - [ ] Install client, configure keys.
+    - [ ] Implement function `callFalAiTextToImage(prompt: string)`.
+- [ ] Task: Integrate OpenAI (`gpt-image-1`) API (Backend for **Text-to-Image Only**).
+    - [ ] Install client, configure keys.
+    - [ ] Implement function `callOpenAiTextToImage(prompt: string)` using Images API (`/generations`).
+- [ ] Task: Adapt Backend Logic for *Product* Image Generation Modes.
+    - [ ] Modify image processing logic (e.g., `processSinglePlaceholder`) based on UI mode.
+    - [ ] Construct current-style prompt from `placeholder.description`.
+    *   [ ] Call respective API function (`callGetImgApi`, `callFalAiTextToImage`, `callOpenAiTextToImage`).
+    *   [ ] Ensure response handling, fallbacks, persistence for products.
+
+**Phase 2: Product Image Consistency Experiments**
+- [ ] Task: Implement Reference Image Handling for `fal.ai` & OpenAI (Products Only).
+    - [ ] Add logic for hardcoded reference image (read/upload/encode).
+    - [ ] Create new API call functions (`callFalAiWithReference`, `callOpenAiWithReference`) using text+image parameters.
+    - [ ] Adapt backend logic to use these functions in 'falai'/'openai' modes for products.
+- [ ] Task: Define & Implement "Richer Prompt" Generation Strategy (Products Only).
+    - [ ] Determine method for generating richer prompts (e.g., manual examples, LLM expansion).
+    - [ ] Adapt backend logic to construct and use richer prompts for text-to-image calls (add new mode or modify existing).
+- [ ] Task: Test & Evaluate Product Image Consistency.
+    - [ ] Generate stores comparing baseline, reference image, and richer prompt approaches.
+    - [ ] Evaluate stylistic consistency. Document findings and decide on preferred strategy.
+
+**Phase 3: Hero Image Generation**
+- [ ] Task: Enable Text-to-Image Generation for Hero Images.
+    - [ ] Adapt image processing logic to handle hero placeholders based on UI mode.
+    - [ ] Construct appropriate text prompts for hero images.
+    - [ ] Call basic text-to-image functions for selected engine.
+- [ ] Task: Experiment with Hero Image Alignment (Prompt Engineering).
+    - [ ] Focus on modifying text prompts to encourage correct composition (left/right empty space). Test across engines.
+- [ ] Task: Implement Hero Image Fallback & Persistence.
+    - [ ] Handle errors/poor alignment (e.g., fallback to DB stock).
+    - [ ] Integrate persistence (upload, hash, embed, DB insert), consider `layout_hint`.
+- [ ] Task: *(Optional/If Needed)* Apply Consistency Strategy to Hero Images.
+    - [ ] Implement chosen product consistency strategy (Reference/Rich prompts) if needed for heroes.
+
+### 8.6 Predetermined Color Palettes (Deferred)
+
+#### 8.6.1 Goals & Overview
+
+This workstream aims to improve the reliability and maintainability of store color theme application by replacing dynamic LLM color generation with a predefined set of palettes.
+
+#### 8.6.2 Design Considerations & Rationale
+
+- **Problem:** The current approach requires the LLM to generate colors in two different formats (OKLCH for global settings, hex for section themes) and apply them consistently, which is complex, error-prone, and makes the prompt brittle.
+- **Chosen Approach (Backend Injection):** To ensure correctness and simplify the LLM's task, the LLM will only be asked to output the *name* of a desired palette (from a predefined list). Backend code will then look up the corresponding color definitions (stored in `.ts` code) and inject the correct OKLCH and hex values into the final JSON structure. This approach prioritizes reliability and maintainability over maximizing LLM responsibility.
+- **Implementation:** Will be done in two steps: first, refactor the prompt and backend to handle a default theme via injection, then introduce the named palettes and selection mechanism.
+
+#### 8.6.3 Implementation Plan
+
+*(This workstream is deferred until Image Generation Enhancements are further along)*
+
+- [ ] **Task: Refactor Prompt & Backend for Colors (Default Injection)**
+    - [ ] Simplify `gen-store-json-prompt.md` by removing detailed color generation rules.
+    - [ ] Modify backend (`/api/generate/route.ts`) to inject a hardcoded *default* theme (OKLCH & hex values) if the LLM provides no color information.
+- [ ] **Task: Implement Predefined Color Palettes (Named Palettes)**
+    - [ ] Define 1-2 named palettes (OKLCH/hex values) in code (e.g., `constants/palettes.ts`).
+    - [ ] Update the (simplified) prompt to instruct the LLM to output a `settings.chosenPaletteName`.
+    - [ ] Enhance backend logic to read the chosen name, look up the palette, and inject the specific colors.
+
+--- 
+
