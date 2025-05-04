@@ -30,6 +30,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ImageDetailDialog } from '@/components/image-detail-dialog';
 import { formatRelativeTime } from '@/utils/format-date';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { DeleteImageButton } from '@/components/delete-image-button';
 
 // Types based on your database schema
 interface ImageItem {
@@ -62,9 +63,11 @@ export default function ImageLibrary() {
   const [images, setImages] = useState<ImageItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const itemsPerPage = 16;
   const [selectedImage, setSelectedImage] = useState<ImageItem | null>(null);
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
+  const [totalImageCount, setTotalImageCount] = useState(0);
 
   // Debounce the search term using useDebounceValue
   const [debouncedSearchTerm] = useDebounceValue(searchTerm, 500);
@@ -79,6 +82,7 @@ export default function ImageLibrary() {
       limit: itemsPerPage.toString(),
       imageType: imageType,
       source: source,
+      sortOrder: sortOrder,
     });
 
     // Use the debounced term for the query
@@ -102,6 +106,7 @@ export default function ImageLibrary() {
       const data: ApiResponse = await response.json();
 
       setImages(data.images);
+      setTotalImageCount(data.totalCount);
       // Ensure totalPages is at least 1
       setTotalPages(Math.max(1, Math.ceil(data.totalCount / itemsPerPage)));
     } catch (err: any) {
@@ -118,6 +123,7 @@ export default function ImageLibrary() {
     debouncedSearchTerm, // Depend on the debounced value
     imageType,
     source,
+    sortOrder,
   ]);
 
   // Fetch images when dependencies change
@@ -128,7 +134,7 @@ export default function ImageLibrary() {
   // Reset page to 1 when filters or debounced search term change
   useEffect(() => {
     setCurrentPage(1);
-  }, [debouncedSearchTerm, imageType, source]);
+  }, [debouncedSearchTerm, imageType, source, sortOrder]);
 
   const handlePageChange = (newPage: number) => {
     if (newPage > 0 && newPage <= totalPages && !loading) {
@@ -139,6 +145,31 @@ export default function ImageLibrary() {
   const handleImageClick = (image: ImageItem) => {
     setSelectedImage(image);
     setDetailDialogOpen(true);
+  };
+
+  // Handler for when an image is successfully deleted
+  const handleImageDeleted = (deletedImageId: string) => {
+    setImages((currentImages) =>
+      currentImages.filter((img) => img.id !== deletedImageId),
+    );
+    // Decrement total count - important for pagination calculation
+    setTotalImageCount((currentCount) => Math.max(0, currentCount - 1));
+
+    // Optional: Refetch if the current page becomes empty after deletion
+    // Or adjust totalPages based on new totalImageCount
+    const newTotalPages = Math.max(
+      1,
+      Math.ceil((totalImageCount - 1) / itemsPerPage),
+    );
+    setTotalPages(newTotalPages);
+    if (currentPage > newTotalPages) {
+      setCurrentPage(newTotalPages); // Go to last page if current page > new total pages
+    }
+    // Close detail dialog if the deleted image was selected
+    if (selectedImage?.id === deletedImageId) {
+      setDetailDialogOpen(false);
+      setSelectedImage(null);
+    }
   };
 
   return (
@@ -187,6 +218,19 @@ export default function ImageLibrary() {
                 <SelectItem value="getimg.ai">GetImg.ai</SelectItem>
                 <SelectItem value="fal.ai-flux-1.1-pro">Fal AI</SelectItem>
                 <SelectItem value="openai-gpt-image-1">OpenAI</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select
+              value={sortOrder}
+              onValueChange={(value) => setSortOrder(value as 'asc' | 'desc')}
+            >
+              <SelectTrigger className="w-[160px]">
+                <SelectValue placeholder="Sort By" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="desc">Newest First</SelectItem>
+                <SelectItem value="asc">Oldest First</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -260,8 +304,17 @@ export default function ImageLibrary() {
                 {images.map((image) => (
                   <Card
                     key={image.id}
-                    className="overflow-hidden cursor-pointer hover:shadow-md transition-shadow"
-                    onClick={() => handleImageClick(image)}
+                    className="overflow-hidden cursor-pointer hover:shadow-md transition-shadow group relative"
+                    onClick={(e) => {
+                      if (
+                        !(
+                          e.target instanceof Element &&
+                          e.target.closest('button') !== null
+                        )
+                      ) {
+                        handleImageClick(image);
+                      }
+                    }}
                   >
                     <CardContent className="p-0">
                       <div className="relative h-48 bg-muted">
@@ -273,22 +326,34 @@ export default function ImageLibrary() {
                         />
                       </div>
                       <div className="p-4 space-y-2">
-                        <div className="flex flex-wrap gap-1">
-                          <Badge
-                            variant={
-                              image.image_type === 'product'
-                                ? 'default'
-                                : 'secondary'
-                            }
-                          >
-                            {image.image_type || 'Unknown'}
-                          </Badge>
-                          <Badge variant="outline">{image.source}</Badge>
-                          {image.layout_hint && (
-                            <Badge variant="outline">
-                              Layout: {image.layout_hint}
+                        <div className="flex justify-between items-center mt-2">
+                          <div className="flex gap-2 flex-wrap">
+                            <Badge
+                              variant={
+                                image.image_type === 'product'
+                                  ? 'default'
+                                  : 'secondary'
+                              }
+                            >
+                              {image.image_type || 'Unknown'}
                             </Badge>
-                          )}
+                            <Badge variant="outline">{image.source}</Badge>
+                            {image.layout_hint && (
+                              <Badge variant="outline">
+                                Layout: {image.layout_hint}
+                              </Badge>
+                            )}
+                          </div>
+                          <DeleteImageButton
+                            imageId={image.id}
+                            imageName={
+                              image.filename || image.shortName || image.id
+                            }
+                            onDeleted={handleImageDeleted}
+                            variant="ghost"
+                            size="icon"
+                            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-black/20 hover:bg-black/40 backdrop-blur-sm text-white rounded-md"
+                          />
                         </div>
                         <h3
                           className="font-medium truncate"
@@ -325,6 +390,7 @@ export default function ImageLibrary() {
                     <TableHead>Source</TableHead>
                     <TableHead>Created</TableHead>
                     <TableHead>Path</TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -351,6 +417,9 @@ export default function ImageLibrary() {
                         </TableCell>
                         <TableCell>
                           <Skeleton className="h-4 w-32" />
+                        </TableCell>
+                        <TableCell>
+                          <Skeleton className="h-4 w-20" />
                         </TableCell>
                       </TableRow>
                     ))
@@ -417,6 +486,16 @@ export default function ImageLibrary() {
                             {image.blob_pathname}
                           </div>
                         </TableCell>
+                        <TableCell className="text-right">
+                          <DeleteImageButton
+                            imageId={image.id}
+                            imageName={
+                              image.filename || image.shortName || image.id
+                            }
+                            onDeleted={handleImageDeleted}
+                            variant="ghost"
+                          />
+                        </TableCell>
                       </TableRow>
                     ))
                   )}
@@ -427,11 +506,15 @@ export default function ImageLibrary() {
         </Tabs>
       </div>
 
-      <ImageDetailDialog
-        image={selectedImage}
-        open={detailDialogOpen}
-        onOpenChange={setDetailDialogOpen}
-      />
+      {/* Image Detail Dialog */}
+      {selectedImage && (
+        <ImageDetailDialog
+          image={selectedImage}
+          open={detailDialogOpen}
+          onOpenChange={setDetailDialogOpen}
+          onDeleted={handleImageDeleted}
+        />
+      )}
     </div>
   );
 }

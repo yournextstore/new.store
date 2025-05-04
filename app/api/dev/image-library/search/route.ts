@@ -11,6 +11,7 @@ const searchParamsSchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(12), // Max 100 per page
   imageType: z.enum(['all', 'product', 'hero']).default('all'),
   source: z.string().optional(), // Allow 'all' or specific sources like 'static', 'getimg.ai'
+  sortOrder: z.enum(['asc', 'desc']).default('desc'), // sort order according to `created_at`
 });
 
 // Helper to build WHERE clauses and parameters dynamically
@@ -69,6 +70,7 @@ export async function GET(request: NextRequest) {
       limit: searchParams.get('limit') || undefined,
       imageType: searchParams.get('imageType') || undefined,
       source: searchParams.get('source') || undefined,
+      sortOrder: searchParams.get('sortOrder') || undefined, // Add sortOrder
     });
 
     if (!parseResult.success) {
@@ -113,6 +115,9 @@ export async function GET(request: NextRequest) {
       imageQueryParams.push(params.limit); // Add limit param
       imageQueryParams.push(offset); // Add offset param
 
+      // Determine sort direction based on validated param
+      const orderByClause = `ORDER BY created_at ${params.sortOrder.toUpperCase()}`;
+
       const imagesQuery = `
         SELECT
           id,
@@ -129,7 +134,7 @@ export async function GET(request: NextRequest) {
           hash
         FROM images
         ${whereClause}
-        ORDER BY created_at DESC
+        ${orderByClause}
         LIMIT $${queryParams.length + 1}
         OFFSET $${queryParams.length + 2}
       `;
