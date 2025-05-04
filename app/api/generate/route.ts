@@ -278,7 +278,7 @@ async function replaceImagePlaceholders(
             }
 
             // --- Conditional Image Handling ---
-            if (imageMode === 'generate') {
+            if (imageMode !== 'stock') {
               // --- GENERATE PATH ---
               // Add to list for batch processing later
               productPlaceholdersToGenerate.push({

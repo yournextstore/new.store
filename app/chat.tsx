@@ -2,10 +2,9 @@
 
 import NextSteps from '@/components/next-steps';
 import { Button } from '@/components/ui/button';
-import { RadioGroup } from '@/components/ui/radio-group';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Label } from '@radix-ui/react-label';
-import { RadioGroupItem } from '@radix-ui/react-radio-group';
 import type { User } from 'better-auth';
 import { CheckIcon, ClipboardIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -34,13 +33,19 @@ const availableUsers = [
   // Add more users here later
 ];
 
+// Define the generation modes type with specific backend identifiers
+type GenerationMode =
+  | 'stock'
+  | 'getimg.ai'
+  | 'fal.ai-flux-1.1-pro'
+  | 'openai-gpt-image-1';
+
 export const ChatInner = ({ user }: { user: User }) => {
   const [activeTab, setActiveTab] = useState('preview');
   const [prompt, setPrompt] = useState('');
   // State for image generation mode
-  const [imageGenerationMode, setImageGenerationMode] = useState<
-    'stock' | 'generate'
-  >('stock');
+  const [imageGenerationMode, setImageGenerationMode] =
+    useState<GenerationMode>('stock');
   // State for JSON response
   const [responseJson, setResponseJson] = useState<object | null>(null);
   const [storeUrl, setStoreUrl] = useState<string | null>(null); // State for store URL
@@ -120,24 +125,43 @@ export const ChatInner = ({ user }: { user: User }) => {
           onChange={(e) => setPrompt(e.target.value)}
           disabled={isLoading}
         />
-        {/* TODO: Switch this to either radio group or a dropdown */}
+        {/* Replace Tabs with RadioGroup for mode selection */}
         <div className="mb-4">
-          <Tabs
+          <Label className="text-sm font-medium mb-2 block">
+            Image Generation Mode
+          </Label>
+          <RadioGroup
             value={imageGenerationMode}
             onValueChange={(value) =>
-              setImageGenerationMode(value as 'stock' | 'generate')
+              setImageGenerationMode(value as GenerationMode)
             }
-            className="w-full"
+            className="flex flex-col space-y-1"
           >
-            <TabsList className="grid w-full grid-cols-2 h-9">
-              <TabsTrigger value="stock" className="text-xs px-2">
-                Use Stock Images
-              </TabsTrigger>
-              <TabsTrigger value="generate" className="text-xs px-2">
-                Generate New Images
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value="stock" id="mode-stock" />
+              <Label htmlFor="mode-stock" className="text-sm font-normal">
+                Stock Images
+              </Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value="getimg.ai" id="mode-getimg" />
+              <Label htmlFor="mode-getimg" className="text-sm font-normal">
+                Generate (GetImg)
+              </Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value="fal.ai-flux-1.1-pro" id="mode-falai" />
+              <Label htmlFor="mode-falai" className="text-sm font-normal">
+                Generate (Fal AI)
+              </Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value="openai-gpt-image-1" id="mode-openai" />
+              <Label htmlFor="mode-openai" className="text-sm font-normal">
+                Generate (OpenAI)
+              </Label>
+            </div>
+          </RadioGroup>
         </div>
         <div className="flex gap-2 flex-wrap">
           {/* Example Buttons */}
