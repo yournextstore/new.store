@@ -1,0 +1,6 @@
+---
+description: when you want to use npm, install dependency or run an application
+globs: 
+alwaysApply: false
+---
+- always use `pnpm` instead of `npm`
