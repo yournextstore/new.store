@@ -863,9 +863,9 @@ The shoe is the only object in the frame, centered horizontally, with soft, diff
 
 **Phase 1: Walking Skeleton - Add New Engines for *Product* Images (Text-to-Image)**
 - [x] Task: Extend the existing UI for Generation Mode Selection (4 modes: Stock, getimg, falai, openai). *(Frontend change)*
-- [ ] Task: Integrate `fal.ai` API (Backend for **Text-to-Image Only**).
-    - [ ] Install `fal.ai` client, configure keys according to https://fal.ai/models/fal-ai/flux-pro/v1.1/api
-    - [ ] Implement function `callFalAiTextToImage(prompt: string)`.
+- [x] Task: Integrate `fal.ai` API (Backend for **Text-to-Image Only**).
+    - [x] Install `fal.ai` client, configure keys according to https://fal.ai/models/fal-ai/flux-pro/v1.1/api
+    - [x] Implement function `callFalAiTextToImage(prompt: string)`.
 - [ ] Task: Integrate OpenAI (`gpt-image-1`) API (Backend for **Text-to-Image Only**).
     - [ ] Implement function `callOpenAiTextToImage(prompt: string)` using the OpenAI Images API (`/v1/images/generations`) with the `gpt-image-1` model.
 - [ ] Task: Adapt Backend Logic for *Product* Image Generation Modes.

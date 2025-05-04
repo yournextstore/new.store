@@ -20,6 +20,7 @@
     "@codemirror/theme-one-dark": "^6.1.2",
     "@codemirror/view": "^6.35.3",
     "@daveyplate/better-auth-ui": "1.4.1",
+    "@fal-ai/serverless-client": "^0.15.0",
     "@neondatabase/serverless": "1.0.0",
     "@next/env": "15.3.0",
     "@radix-ui/react-alert-dialog": "^1.1.2",
