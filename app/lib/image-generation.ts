@@ -1,10 +1,20 @@
 import { put } from '@vercel/blob';
 import path from 'node:path';
-import crypto from 'node:crypto'; // Added for hash calculation
 import { embed, generateText } from 'ai'; // Added for embedding and text gen
 import { openai } from '@ai-sdk/openai'; // Added for models
 import { pool } from '@/lib/db'; // Added for database access
 import { callGetImgApi } from './getimg-api';
+import { callFalAiTextToImage } from './fal-api';
+import { callOpenAiTextToImage } from './openai-image-api';
+import { calculateHash } from './utils';
+
+// --- Types and Constants ---
+// Define and EXPORT the generation modes type
+export type GenerationMode =
+  | 'stock' // Not used in this file directly for generation, but part of the type
+  | 'getimg.ai'
+  | 'fal.ai-flux-1.1-pro'
+  | 'openai-gpt-image-1';
 
 // --- Model Definitions ---
 const EMBEDDING_MODEL = openai.embedding('text-embedding-3-small');
@@ -50,15 +60,6 @@ async function downloadImageFromUrl(getimgUrl: string): Promise<{
     console.error(`[Image Util] Error downloading ${getimgUrl}:`, error);
     return null;
   }
-}
-
-/**
- * Calculates the SHA256 hash of a buffer.
- * @param buffer The input buffer.
- * @returns The hex-encoded SHA256 hash.
- */
-function calculateHash(buffer: Buffer): string {
-  return crypto.createHash('sha256').update(buffer).digest('hex');
 }
 
 /**
@@ -108,7 +109,7 @@ async function generateImageEmbedding(
 
 /**
  * Inserts image metadata into the database.
- * @param data Object containing image metadata.
+ * @param data Object containing image metadata, including the generation source.
  * @returns True if insertion was successful, false otherwise.
  */
 async function insertImageRecord(data: {
@@ -119,6 +120,7 @@ async function insertImageRecord(data: {
   filename: string;
   shortName: string | null;
   blob_pathname: string;
+  source: string;
   generationPrompt?: string;
 }): Promise<boolean> {
   if (!pool) {
@@ -147,14 +149,16 @@ async function insertImageRecord(data: {
       data.blob_pathname,
       null, // layout_hint is null for product images
       'product', // image_type
-      'getimg.ai', // source
+      data.source,
       data.generationPrompt,
     ]);
-    console.log(`[DB Util] Inserted record for ${data.blob_pathname}`);
+    console.log(
+      `[DB Util] Inserted record for ${data.blob_pathname} (Source: ${data.source})`,
+    );
     return true;
   } catch (error) {
     console.error(
-      `[DB Util] Failed to insert record for ${data.blob_pathname}:`,
+      `[DB Util] Failed to insert record for ${data.blob_pathname} (Source: ${data.source}):`,
       error,
     );
     return false;
@@ -178,15 +182,22 @@ interface ProcessedImageResult {
 }
 
 /**
- * Processes a single image placeholder: generates via getimg.ai, uploads,
- * calculates hash, generates embedding & shortName, inserts into DB.
+ * Processes a single image placeholder: generates via the specified API,
+ * uploads, calculates hash, generates embedding & shortName, inserts into DB.
  * @param placeholder The image placeholder object.
+ * @param generationMode The selected image generation mode/API.
  * @returns A promise resolving to the ProcessedImageResult.
  */
 async function processSinglePlaceholder(
   placeholder: ImagePlaceholder,
+  generationMode: GenerationMode,
 ): Promise<ProcessedImageResult> {
-  let getimgUrl: string | null = null;
+  // Variables to hold intermediate results
+  let externalImageUrl: string | null = null; // URL from GetImg/Fal
+  let blobUrlFromOpenAI: string | null = null; // Direct Blob URL from OpenAI helper
+  let openAiResult: { blobUrl: string; hash: string } | null = null;
+  const sourceApi = generationMode; // Source string matches mode name (Use const - Linter fix)
+
   let downloadResult: {
     buffer: Buffer;
     filename: string;
@@ -201,46 +212,114 @@ async function processSinglePlaceholder(
   try {
     // 1. Log Original Description & Construct Modified Prompt
     console.log(
-      '[getimg.ai Prompt] Original description:',
+      `[Image Gen Util - ${generationMode}] Original description:`,
       placeholder.description,
     );
-    // TODO: Add DB column & logic to persist the modifiedPrompt below (see PRD Task 8.4.2.x)
+    // TODO: Consider if prompt needs modification per API
     const modifiedPrompt = `Product photo:
 ${placeholder.description}
 
 Style: suitable for ecommerce site, clean, white background, centered product shot, no text.`;
-    console.log('[getimg.ai Prompt] Modified prompt:', modifiedPrompt);
-
-    // 2. Call getimg.ai with the MODIFIED prompt
-    getimgUrl = await callGetImgApi(modifiedPrompt);
-    if (!getimgUrl) {
-      console.warn(
-        `[Image Gen Util] Failed getimg.ai call for: ${placeholder.originalUrl}.`,
-      );
-      throw new Error('getimg.ai call failed');
-    }
-
-    // 3. Download Image
-    downloadResult = await downloadImageFromUrl(getimgUrl);
-    if (!downloadResult) {
-      throw new Error('Image download failed');
-    }
-    const { buffer: imageBuffer, filename, contentType } = downloadResult;
-    const blobPathname = `generated/${filename}`; // Define Blob pathname
-
-    // 4. Upload to Vercel Blob
-    console.log(`[Image Gen Util] Uploading image to: ${blobPathname}...`);
-    blobResult = await put(blobPathname, imageBuffer, {
-      access: 'public',
-      contentType: contentType || undefined,
-      // No addRandomSuffix needed if getimg filenames are unique enough
-    });
     console.log(
-      `[Image Gen Util] Upload successful. Blob URL: ${blobResult.url}`,
+      `[Image Gen Util - ${generationMode}] Modified prompt:`,
+      modifiedPrompt,
     );
 
-    // 5. Calculate Hash
-    imageHash = calculateHash(imageBuffer);
+    // 2. Call the selected Generation API
+    console.log(`[Image Gen Util - ${generationMode}] Calling API...`);
+    switch (generationMode) {
+      case 'getimg.ai':
+        externalImageUrl = await callGetImgApi(modifiedPrompt);
+        break;
+      case 'fal.ai-flux-1.1-pro':
+        externalImageUrl = await callFalAiTextToImage(modifiedPrompt);
+        break;
+      case 'openai-gpt-image-1':
+        // OpenAI helper returns object with blobUrl and hash
+        openAiResult = await callOpenAiTextToImage(modifiedPrompt);
+        blobUrlFromOpenAI = openAiResult?.blobUrl ?? null; // Extract URL for check
+        imageHash = openAiResult?.hash ?? null; // Extract hash directly
+        break;
+      default:
+        console.error(
+          `[Image Gen Util] Unknown generation mode: ${generationMode}`,
+        );
+        throw new Error(`Unknown generation mode: ${generationMode}`);
+    }
+
+    // Check if API call failed
+    if (!externalImageUrl && !blobUrlFromOpenAI) {
+      console.warn(
+        `[Image Gen Util - ${generationMode}] API call failed for: ${placeholder.originalUrl}.`,
+      );
+      throw new Error(`${generationMode} API call failed`);
+    }
+
+    // --- Process the result (Download/Upload if necessary) ---
+    let finalBlobUrl: string | null = null;
+    let finalBlobPathname: string | null = null;
+    let finalFilename: string | null = null;
+    let finalImageBuffer: Buffer | null = null;
+
+    if (blobUrlFromOpenAI && openAiResult) {
+      // Check openAiResult for safety
+      // OpenAI already uploaded, use its details
+      finalBlobUrl = openAiResult.blobUrl;
+      imageHash = openAiResult.hash; // Use hash from result
+      // Derive pathname and filename from URL (best effort)
+      try {
+        const url = new URL(finalBlobUrl);
+        finalBlobPathname = url.pathname.substring(1); // Remove leading '/'
+        finalFilename = path.basename(finalBlobPathname);
+      } catch {
+        /* ignore parsing errors */
+      }
+    } else if (externalImageUrl) {
+      // GetImg/Fal returned an external URL, need to download and upload
+      // 3. Download Image
+      console.log(
+        `[Image Gen Util - ${generationMode}] Downloading from external URL...`,
+      );
+      downloadResult = await downloadImageFromUrl(externalImageUrl);
+      if (!downloadResult) {
+        throw new Error('Image download failed');
+      }
+      const { buffer: imageBuffer, filename, contentType } = downloadResult;
+      finalFilename = filename;
+      finalImageBuffer = imageBuffer;
+      const blobPathname = `generated/${filename}`; // Define Blob pathname
+
+      // 4. Upload to Vercel Blob
+      console.log(
+        `[Image Gen Util - ${generationMode}] Uploading image to: ${blobPathname}...`,
+      );
+      blobResult = await put(blobPathname, imageBuffer, {
+        access: 'public',
+        contentType: contentType || undefined,
+      });
+      console.log(
+        `[Image Gen Util - ${generationMode}] Upload successful. Blob URL: ${blobResult.url}`,
+      );
+      finalBlobUrl = blobResult.url;
+      finalBlobPathname = blobResult.pathname;
+      // Calculate hash if buffer exists (only for non-OpenAI flow now)
+      if (finalImageBuffer) {
+        imageHash = calculateHash(finalImageBuffer);
+      }
+    }
+
+    // Ensure we have a final Blob URL, pathname, filename and hash
+    if (!finalBlobUrl || !finalBlobPathname || !finalFilename || !imageHash) {
+      console.error('[Image Gen Util] Missing required data after processing', {
+        finalBlobUrl,
+        finalBlobPathname,
+        finalFilename,
+        imageHash,
+      });
+      throw new Error(
+        'Failed to obtain final Blob URL, pathname, filename, or hash.',
+      );
+    }
 
     // 6. Generate Embedding
     embedding = await generateImageEmbedding(placeholder.description);
@@ -252,15 +331,16 @@ Style: suitable for ecommerce site, clean, white background, centered product sh
     shortName = await generateShortName(placeholder.description);
     // We proceed even if shortName is null, as it's nullable in DB
 
-    // 8. Insert into Database
+    // 8. Insert into Database (using the determined source and final details)
     dbSuccess = await insertImageRecord({
-      blob_url: blobResult.url,
+      blob_url: finalBlobUrl,
       description: placeholder.description,
       embedding: embedding,
       hash: imageHash,
-      filename: filename,
+      filename: finalFilename,
       shortName: shortName,
-      blob_pathname: blobResult.pathname, // Use pathname from blob result
+      blob_pathname: finalBlobPathname,
+      source: sourceApi, // Pass the determined source API
       generationPrompt: modifiedPrompt,
     });
     if (!dbSuccess) {
@@ -268,11 +348,11 @@ Style: suitable for ecommerce site, clean, white background, centered product sh
     }
 
     // If all steps succeeded
-    return { originalUrl: placeholder.originalUrl, blobUrl: blobResult.url };
+    return { originalUrl: placeholder.originalUrl, blobUrl: finalBlobUrl };
   } catch (error) {
     // Log the specific error that caused the failure
     console.error(
-      `[Image Gen Util] Failed processing placeholder ${placeholder.originalUrl}:`,
+      `[Image Gen Util - ${generationMode}] Failed processing placeholder ${placeholder.originalUrl}:`,
       error instanceof Error ? error.message : error,
     );
     // TODO: Consider cleanup? e.g., delete blob if DB insert failed? For now, leave it.
@@ -281,24 +361,29 @@ Style: suitable for ecommerce site, clean, white background, centered product sh
 }
 
 /**
- * Processes a list of image placeholders: generates images via getimg.ai,
+ * Processes a list of image placeholders: generates images via the specified API,
  * uploads them to Vercel Blob, generates metadata, stores in DB, and returns results.
  * @param placeholders Array of image placeholder objects.
+ * @param generationMode The selected image generation mode/API.
  * @returns A promise resolving to an array of processed image results.
  */
 export async function generateAndUploadPlaceholders(
   placeholders: ImagePlaceholder[],
+  generationMode: GenerationMode,
 ): Promise<Array<ProcessedImageResult>> {
   if (!placeholders || placeholders.length === 0) {
     return [];
   }
 
   console.log(
-    `[Image Gen Util] Starting generation, upload & persistence for ${placeholders.length} images...`,
+    `[Image Gen Util] Starting generation (${generationMode}), upload & persistence for ${placeholders.length} images...`,
   );
 
   // TODO: Implement concurrency limiting (e.g., p-limit)
-  const processingPromises = placeholders.map(processSinglePlaceholder);
+  // Pass generationMode to each individual processor
+  const processingPromises = placeholders.map((p) =>
+    processSinglePlaceholder(p, generationMode),
+  );
 
   // Wait for all operations to settle
   const results = await Promise.allSettled(processingPromises);

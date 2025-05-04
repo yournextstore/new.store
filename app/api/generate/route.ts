@@ -5,6 +5,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { pool } from '@/lib/db';
 import { generateAndUploadPlaceholders } from '../../lib/image-generation';
+import { type GenerationMode } from '../../lib/image-generation';
 
 // --- Constants & Types ---
 const EMBEDDING_MODEL = openai.embedding('text-embedding-3-small');
@@ -139,15 +140,15 @@ async function findImageInDB(
 
 /**
  * Recursively traverses a JSON object/array and replaces image placeholder URLs
- * (matching `https://yns.img?description=...`) with URLs found via DB similarity search.
+ * (matching `https://yns.img?description=...`) with URLs found via DB similarity search or generation.
  * Handles different image types (product, hero) and alignment requirements.
  * @param json The JSON data (or sub-part) to process.
- * @param imageMode Determines whether to use DB lookup ('stock') or getimg.ai calls ('generate') for PRODUCT images.
+ * @param imageMode Determines the source for PRODUCT images ('stock' or a generation API identifier).
  * @returns The modified JSON data.
  */
 async function replaceImagePlaceholders(
   json: any,
-  imageMode: 'stock' | 'generate',
+  imageMode: GenerationMode,
 ): Promise<any> {
   let totalPlaceholders = 0;
   let successfulMatches = 0;
@@ -326,9 +327,10 @@ async function replaceImagePlaceholders(
 
     // --- Execute Generation Calls (if any) ---
     if (productPlaceholdersToGenerate.length > 0) {
-      // Call the refactored utility function
+      // Call the refactored utility function, passing the imageMode
       const generationResults = await generateAndUploadPlaceholders(
         productPlaceholdersToGenerate,
+        imageMode,
       );
 
       // Create a map for easy lookup of product references
@@ -409,9 +411,22 @@ export async function POST(req: Request) {
     const body = await req.json();
     const userPrompt = body.prompt;
     const userId = body.userId;
-    // Default to 'stock' if invalid or missing
-    const imageGenerationMode =
-      body.imageGenerationMode === 'generate' ? 'generate' : 'stock';
+
+    // Directly use the mode from the request body, default to 'stock' if invalid/missing
+    const requestedMode = body.imageGenerationMode;
+    const validModes: GenerationMode[] = [
+      'stock',
+      'getimg.ai',
+      'fal.ai-flux-1.1-pro',
+      'openai-gpt-image-1',
+    ];
+    const imageGenerationMode: GenerationMode =
+      typeof requestedMode === 'string' &&
+      validModes.includes(requestedMode as GenerationMode)
+        ? (requestedMode as GenerationMode)
+        : 'stock';
+
+    console.log(`Using image generation mode: ${imageGenerationMode}`);
 
     if (!userPrompt || typeof userPrompt !== 'string') {
       return NextResponse.json(

@@ -47,9 +47,10 @@ export async function callFalAiTextToImage(
         // Add other parameters as needed, e.g., negative_prompt, num_inference_steps
       },
       logs: true, // Optional: include logs for debugging
-      onQueueUpdate(update) {
-        console.log('[Fal AI] Queue update:', update);
-      },
+      // disable queue update logging as its rather noisy
+      //   onQueueUpdate(update) {
+      //     console.log('[Fal AI] Queue update:', update);
+      //   },
     });
 
     const timeoutPromise = new Promise<null>((_, reject) =>

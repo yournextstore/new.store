@@ -185,6 +185,8 @@ export default function ImageLibrary() {
                 <SelectItem value="all">All Sources</SelectItem>
                 <SelectItem value="static">Static</SelectItem>
                 <SelectItem value="getimg.ai">GetImg.ai</SelectItem>
+                <SelectItem value="fal.ai-flux-1.1-pro">Fal AI</SelectItem>
+                <SelectItem value="openai-gpt-image-1">OpenAI</SelectItem>
               </SelectContent>
             </Select>
           </div>

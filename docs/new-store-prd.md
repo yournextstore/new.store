@@ -866,13 +866,13 @@ The shoe is the only object in the frame, centered horizontally, with soft, diff
 - [x] Task: Integrate `fal.ai` API (Backend for **Text-to-Image Only**).
     - [x] Install `fal.ai` client, configure keys according to https://fal.ai/models/fal-ai/flux-pro/v1.1/api
     - [x] Implement function `callFalAiTextToImage(prompt: string)`.
-- [ ] Task: Integrate OpenAI (`gpt-image-1`) API (Backend for **Text-to-Image Only**).
-    - [ ] Implement function `callOpenAiTextToImage(prompt: string)` using the OpenAI Images API (`/v1/images/generations`) with the `gpt-image-1` model.
-- [ ] Task: Adapt Backend Logic for *Product* Image Generation Modes.
-    - [ ] Modify image processing logic (e.g., `processSinglePlaceholder`) based on UI mode.
-    - [ ] Construct current-style prompt from `placeholder.description`.
-    *   [ ] Call respective API function (`callGetImgApi`, `callFalAiTextToImage`, `callOpenAiTextToImage`).
-    *   [ ] Ensure response handling, fallbacks, persistence for products.
+- [x] Task: Integrate OpenAI (`gpt-image-1`) API (Backend for **Text-to-Image Only**).
+    - [x] Implement function `callOpenAiTextToImage(prompt: string)` using the OpenAI Images API (`/v1/images/generations`) with the `gpt-image-1` model.
+- [x] Task: Adapt Backend Logic for *Product* Image Generation Modes.
+    - [x] Modify image processing logic (e.g., `processSinglePlaceholder`) based on UI mode.
+    - [x] Construct current-style prompt from `placeholder.description`.
+    *   [x] Call respective API function (`callGetImgApi`, `callFalAiTextToImage`, `callOpenAiTextToImage`).
+    *   [x] Ensure response handling, fallbacks, persistence for products.
 
 **Phase 2: Product Image Consistency Experiments**
 - [ ] Task: Implement Reference Image Handling for `fal.ai` & OpenAI (Products Only).
