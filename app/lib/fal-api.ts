@@ -32,9 +32,7 @@ export async function callFalAiTextToImage(
     return null;
   }
 
-  console.log(
-    `[Fal AI] Calling API for prompt: "${prompt.substring(0, 70)}..."`,
-  );
+  console.log(`[Fal AI] Calling API for prompt: "${prompt}"`);
 
   try {
     // Use a Promise with a timeout
