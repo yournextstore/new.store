@@ -380,22 +380,33 @@ Below are the section types supported by the Your Next Store platform, along wit
 
 #### 7. Generating Product Image Placeholder URLs
 
-For the `"imageUrl"` field within each object in the `"products"` array, you **must** generate a special placeholder URL. This placeholder tells the backend system what kind of image is desired, allowing it to select an appropriate one from a library later.
+For the `"imageUrl"` field within each object in the `"products"` array, you **must** generate a special placeholder URL. This placeholder tells the backend system what kind of image is desired, allowing it to either select an appropriate one from an existing library or generate a new one.
 
 **Format:**
 The placeholder URL **must** follow this exact format:
 `https://yns.img?description=<URL-encoded description>`
 
 **Description Generation:**
-The `<description>` part should be a **detailed**, objective description (ideally 2-3 sentences) of the desired product image.
-Base the description on the product's `name`, `summary`, and the overall theme/style of the store.
-Focus on key visual elements, style, product category, colors, and materials that would help find a matching image (similar to how the image library descriptions are structured). Aim for clarity and specificity.
-Example: For a product named "Navy Blue Modern Sneaker", a good description might be: `"A sleek, minimalist low-top sneaker in deep blue with a smooth texture, featuring black laces and eyelets and a clean white sole, offering a modern versatile look."` (Notice the detail regarding texture, specific features, and overall aesthetic).
+Generate a richly detailed and structured description (typically 3-5 sentences) for the `<description>` placeholder. This description should provide explicit textual detail about the product's visual elements, lighting, composition, and overall presentation, in addition to its inherent details such as name, color(s), material, and key features.
+
+Focus on creating a vivid and precise visual image through text, including:
+- The product's appearance, including colors, textures, and design elements.
+- How the product is positioned or displayed (e.g., angle, orientation).
+- The background setting (e.g., studio background color).
+- Lighting conditions (e.g., soft, diffused lighting).
+- Any relevant thematic elements related to the store's theme or branding (e.g., logos or names mentioned in the user’s prompt).
+
+Aim to make the description so detailed that it could guide the creation of a consistent image without a reference.
+
+**An Example of Expected Description:**
+```
+A minimalist, low-top casual sneaker displayed in perfect profile against a plain, light gray or off-white studio background. The shoe is lavender in color with a smooth, tightly woven knit textile upper and a matte finish. It has a clean, seamless silhouette with no logos or decorative elements, emphasizing simplicity and modern design. The sneaker features black metal eyelets and matching lavender-colored laces, with a soft, slightly padded tongue integrated smoothly into the upper. The sole is thick, rounded, and made from smooth white rubber or EVA, curving gently at the toe and heel for a contemporary, ergonomic look. The shoe is the only object in the frame, centered horizontally, with soft, diffused lighting that casts a gentle shadow beneath it. The visual style is clean, calm, and modern — ideal for premium ecommerce display.
+```
 
 **URL Encoding:**
-The generated description **must** be URL-encoded before being included in the placeholder URL.
-This means replacing spaces with `%20`, and encoding other special characters (e.g., `&` becomes `%26`, `?` becomes `%3F`). Most programming environments have standard functions for this. Ensure your output description is properly encoded.
-Example (Encoded): `https://yns.img?description=A%20sleek%2C%20minimalist%20low-top%20sneaker%20in%20deep%20blue%20with%20a%20smooth%20texture%2C%20featuring%20black%20laces%20and%20eyelets%20and%20a%20clean%20white%20sole%2C%20offering%20a%20modern%20versatile%20look.`
+The generated description **must** be URL-encoded before being included in the placeholder URL. This means replacing spaces with `%20`, and encoding other special characters (e.g., `,` becomes `%2C`, `&` becomes `%26`, `?` becomes `%3F`). Most programming environments have standard functions for this. Ensure your output description is properly encoded.  
+**Example (Encoded):**
+`https://yns.img?description=A%20minimalist%2C%20low-top%20casual%20sneaker%20displayed%20in%20perfect%20profile%20against%20a%20plain%2C%20light%20gray%20or%20off-white%20studio%20background.%20The%20shoe%20is%20lavender%20in%20color%20with%20a%20smooth%2C%20tightly%20woven%20knit%20textile%20upper%20and%20a%20matte%20finish.%20It%20has%20a%20clean%2C%20seamless%20silhouette%20with%20no%20logos%20or%20decorative%20elements%2C%20emphasizing%20simplicity%20and%20modern%20design.%20The%20sneaker%20features%20black%20metal%20eyelets%20and%20matching%20lavender-colored%20laces%2C%20with%20a%20soft%2C%20slightly%20padded%20tongue%20integrated%20smoothly%20into%20the%20upper.%20The%20sole%20is%20thick%2C%20rounded%2C%20and%20made%20from%20smooth%20white%20rubber%20or%20EVA%2C%20curving%20gently%20at%20the%20toe%20and%20heel%20for%20a%20contemporary%2C%20ergonomic%20look.%20The%20shoe%20is%20the%20only%20object%20in%20the%20frame%2C%20centered%20horizontally%2C%20with%20soft%2C%20diffused%20lighting%20that%20casts%20a%20gentle%20shadow%20beneath%20it.%20The%20visual%20style%20is%20clean%2C%20calm%2C%20and%20modern%20%E2%80%94%20ideal%20for%20premium%20ecommerce%20display.`
 
 **IMPORTANT**: Only use this placeholder format for the `products[].imageUrl` and `HeroSection.data.image.src` (or `HeroSection.data.slides[].image.src`) fields. Other image fields (like `settings.logo`, `settings.ogimage`) should continue using the hardcoded URLs as specified in their respective sections for now.
 
@@ -407,8 +418,10 @@ For the `image.src` field within the `HeroSection` data (either directly in `dat
 `https://yns.img?description=<URL-encoded description>`
 
 **Description Generation:**
-The `<description>` part should be a **detailed**, objective description (ideally 2-3 sentences) of the desired hero image.
-Base the description on the overall theme, style, and potentially the products or feeling described in the user's prompt. Focus on visual elements, mood, composition, and colors that represent the store's brand (e.g., "A bright, airy studio setting with natural wood elements displaying minimalist ceramic vases", "A dramatic, high-contrast shot of a sleek black electronic gadget on a dark textured surface"). Aim for descriptions that capture the essence of a potential hero image.
+Generate a factual description (typically 2-3 sentences) for the `<description>` placeholder for the desired hero image. Focus *only* on objective visual elements: subjects, colors, key features, and **any relevant themes, names, or settings mentioned in the user's overall prompt** (e.g., "A panoramic view of the Warsaw skyline at dusk for the AI Breakfast event"). *Strictly exclude* mention of specific background composition, lighting, camera angles, mood, or subjective style words – these visual style aspects may be handled differently by the backend.
+
+Example: For a hero image for a modern science fiction bookstore, a good description might be:
+`"An overhead view of a sleek, modern bookshelf filled neatly with science fiction paperbacks. The books have varied, colorful spines, suggesting a diverse collection related to the store's theme."`
 
 **URL Encoding:**
 The generated description **must** be URL-encoded before being included in the placeholder URL.

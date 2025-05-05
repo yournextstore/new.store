@@ -879,9 +879,25 @@ The shoe is the only object in the frame, centered horizontally, with soft, diff
     - [ ] Add logic for hardcoded reference image (read/upload/encode).
     - [ ] Create new API call functions (`callFalAiWithReference`, `callOpenAiWithReference`) using text+image parameters.
     - [ ] Adapt backend logic to use these functions in 'falai'/'openai' modes for products.
-- [ ] Task: Define & Implement "Richer Prompt" Generation Strategy (Products Only).
-    - [ ] Determine method for generating richer prompts (e.g., manual examples, LLM expansion).
-    - [ ] Adapt backend logic to construct and use richer prompts for text-to-image calls (add new mode or modify existing).
+- [ ] Task: Richer Prompt Generation Strategy (Products Only).
+  - [x] Stage A — Deterministic Template Expansion (baseline, _must-have_)
+    - [x] Backend: replace the hard-coded `Product photo:` template in `app/lib/image-generation.ts` with a three-sentence scaffold:
+      1. `<concise description>` (from placeholder)
+      2. composition & lighting sentence (“Displayed in perfect profile against a plain light-grey studio background, centred, soft diffused lighting”)
+      3. style sentence (“Clean, calm, modern — ideal for premium e-commerce display.”)
+    - [x] Prompt tweak: in `gen-store-json-prompt.md` tell the AI to output **one factual sentence**; update the example. Replace `The <description> part should be a detailed, objective description (ideally 2-3 sentences) …` with `The <description> must be a single, concise factual sentence that names the product, colour(s), material and one or two key features. Do NOT mention background lighting, camera angle or style words (those will be added later by the backend template).`
+    - [x] Prompt tweak: in `gen-store-json-prompt.md` update the example to use the new prompt structure. Replace `"A sleek, minimalist low-top sneaker in deep blue with a smooth texture, featuring black laces and eyelets and a clean white sole, offering a modern versatile look."` with `   "A deep-blue low-top leather sneaker with black laces, black eyelets and a clean white sole."`
+    - [x] Prompt tweak: in `gen-store-json-prompt.md` same one-sentence guidance for the hero-image placeholders (section 8 of the prompt).
+    - [x] Test whether tweaked prompts lead to better consitency and better quality of product images. The result of testing: short, narrowly-focused products descriptions led to generic, soulless product images. We will not use this approach, and we switched to the richer descriptions (3-5 detailed sentences) that suffer from less consistency, though.
+  - [ ] Stage B — Global Style Emission (_optional_)
+    - [ ] Prompt spec: introduce optional `settings.imageStyle` (2-3 sentences, ≤240 chars).
+    - [ ] Backend: use `settings.imageStyle` to replace the hard-coded style sentence; fallback to default if missing.
+  - [ ] Stage C — LLM-based Prompt Expansion (_exploratory_)
+    - [ ] Prototype a single GPT-3.5 call that combines `[concise description, imageStyle]` into a 3-5-sentence rich prompt; batch per store.
+    - [ ] Measure added latency/cost; A/B compare image quality with Stage A.
+  - [ ] Stage D — Evaluation & Tuning
+    - [ ] Script to generate ~20 products in three modes (current, Stage A, Stage C) and collect designer ratings.
+    - [ ] Choose default generation path based on results; document decision.
 - [ ] Task: Test & Evaluate Product Image Consistency.
     - [ ] Generate stores comparing baseline, reference image, and richer prompt approaches.
     - [ ] Evaluate stylistic consistency. Document findings and decide on preferred strategy.

@@ -216,10 +216,11 @@ async function processSinglePlaceholder(
       placeholder.description,
     );
     // TODO: Consider if prompt needs modification per API
-    const modifiedPrompt = `Product photo:
-${placeholder.description}
+    const modifiedPrompt = `${placeholder.description}
 
-Style: suitable for ecommerce site, clean, white background, centered product shot, no text.`;
+Displayed in perfect profile against a plain light-grey studio background, centred, soft diffused lighting.
+
+Clean, calm, modern — ideal for premium e-commerce display.`;
     console.log(
       `[Image Gen Util - ${generationMode}] Modified prompt:`,
       modifiedPrompt,
