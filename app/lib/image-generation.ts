@@ -186,11 +186,13 @@ interface ProcessedImageResult {
  * uploads, calculates hash, generates embedding & shortName, inserts into DB.
  * @param placeholder The image placeholder object.
  * @param generationMode The selected image generation mode/API.
+ * @param imageStyle The image style (general style for product images consistent with the store concept).
  * @returns A promise resolving to the ProcessedImageResult.
  */
 async function processSinglePlaceholder(
   placeholder: ImagePlaceholder,
   generationMode: GenerationMode,
+  imageStyle?: string | null,
 ): Promise<ProcessedImageResult> {
   // Variables to hold intermediate results
   let externalImageUrl: string | null = null; // URL from GetImg/Fal
@@ -215,14 +217,24 @@ async function processSinglePlaceholder(
       `[Image Gen Util - ${generationMode}] Original description:`,
       placeholder.description,
     );
-    // TODO: Consider if prompt needs modification per API
-    const modifiedPrompt = `${placeholder.description}
 
-Displayed in perfect profile against a plain light-grey studio background, centred, soft diffused lighting.
+    // Define the default style template
+    const defaultStyle = `Displayed in perfect profile against a plain light-grey studio background, centred, soft diffused lighting.\n\nClean, calm, modern — ideal for premium e-commerce display.`;
 
-Clean, calm, modern — ideal for premium e-commerce display.`;
+    // Use provided imageStyle or fallback to default
+    const finalStyle = imageStyle?.trim() ? imageStyle : defaultStyle;
+
+    // Construct the prompt using the description and the selected style
+    const modifiedPrompt = `${placeholder.description}\n\n${finalStyle}`;
+
     console.log(
-      `[Image Gen Util - ${generationMode}] Modified prompt:`,
+      `[Image Gen Util - ${generationMode}] Using Style:`,
+      imageStyle?.trim()
+        ? `"${imageStyle}" (From Settings)`
+        : 'Default Template',
+    );
+    console.log(
+      `[Image Gen Util - ${generationMode}] Final generation prompt:`,
       modifiedPrompt,
     );
 
@@ -366,24 +378,23 @@ Clean, calm, modern — ideal for premium e-commerce display.`;
  * uploads them to Vercel Blob, generates metadata, stores in DB, and returns results.
  * @param placeholders Array of image placeholder objects.
  * @param generationMode The selected image generation mode/API.
+ * @param imageStyle The image style (general style for product images consistent with the store concept).
  * @returns A promise resolving to an array of processed image results.
  */
 export async function generateAndUploadPlaceholders(
   placeholders: ImagePlaceholder[],
   generationMode: GenerationMode,
+  imageStyle?: string | null,
 ): Promise<Array<ProcessedImageResult>> {
-  if (!placeholders || placeholders.length === 0) {
-    return [];
-  }
+  if (placeholders.length === 0) return [];
 
   console.log(
     `[Image Gen Util] Starting generation (${generationMode}), upload & persistence for ${placeholders.length} images...`,
   );
 
-  // TODO: Implement concurrency limiting (e.g., p-limit)
-  // Pass generationMode to each individual processor
+  // Process placeholders concurrently
   const processingPromises = placeholders.map((p) =>
-    processSinglePlaceholder(p, generationMode),
+    processSinglePlaceholder(p, generationMode, imageStyle),
   );
 
   // Wait for all operations to settle

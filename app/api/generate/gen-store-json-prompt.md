@@ -218,7 +218,8 @@ Below are the section types supported by the Your Next Store platform, along wit
         "theme-button": { "DEFAULT": string, "background": string }
       },
       "paletteName": string | null
-    } | null
+    } | null,
+    "imageStyle": string
   }
   ```
 - **Fields**:
@@ -235,6 +236,7 @@ Below are the section types supported by the Your Next Store platform, along wit
     - `"palette.theme-button.DEFAULT"`: Button color.
     - `"palette.theme-button.background"`: Button background color.
     - `"paletteName"`: Optional name for the palette (defaults to null).
+  - `"imageStyle"`: A description of the desired overall visual style for product and hero images (required).
 
 ### Products
 
@@ -325,6 +327,10 @@ Below are the section types supported by the Your Next Store platform, along wit
   - `"storeName"`: Extract from the user's prompt; default to "Your Store" if not specified.
   - `"storeDescription"`: Generate a brief description from the prompt; default to "" if not provided.
   - `"fontFamily"`: Set based on user preference or default to `"merriweather"`.
+  - `"imageStyle"`: (**Mandatory**) Generate a description of the desired overall visual style for product and hero images. Derive this from the user's prompt (store concept, theme, keywords). If no specific style is implied, infer a suitable style based on the store context (e.g., product type). Describe elements like lighting, composition, background, and mood in 2-3 sentences (max 240 characters). Examples:
+    - `"Clean product shots on a pure white background with bright, natural lighting and centered composition."`
+    - `"Dark, moody photography featuring dramatic shadows, emphasizing texture and luxury."`
+    - Fallback example if you can't come up with anything more specific: `"Standard e-commerce product photography with a clean, neutral background."`
 - **Hardcoded Values**:
   - Use hardcoded values for `"logo"` and `"ogimage"` as specified:
     - `"logo"`: { "width": 1024, "height": 1024, "imageUrl": "https://yns.app/icon.png" }

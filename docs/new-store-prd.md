@@ -889,9 +889,9 @@ The shoe is the only object in the frame, centered horizontally, with soft, diff
     - [x] Prompt tweak: in `gen-store-json-prompt.md` update the example to use the new prompt structure. Replace `"A sleek, minimalist low-top sneaker in deep blue with a smooth texture, featuring black laces and eyelets and a clean white sole, offering a modern versatile look."` with `   "A deep-blue low-top leather sneaker with black laces, black eyelets and a clean white sole."`
     - [x] Prompt tweak: in `gen-store-json-prompt.md` same one-sentence guidance for the hero-image placeholders (section 8 of the prompt).
     - [x] Test whether tweaked prompts lead to better consitency and better quality of product images. The result of testing: short, narrowly-focused products descriptions led to generic, soulless product images. We will not use this approach, and we switched to the richer descriptions (3-5 detailed sentences) that suffer from less consistency, though.
-  - [ ] Stage B — Global Style Emission (_optional_)
-    - [ ] Prompt spec: introduce optional `settings.imageStyle` (2-3 sentences, ≤240 chars).
-    - [ ] Backend: use `settings.imageStyle` to replace the hard-coded style sentence; fallback to default if missing.
+  - [x] Stage B — Global Style Emission (_optional_)
+    - [x] Prompt spec: introduce optional `settings.imageStyle` (2-3 sentences, ≤240 chars).
+    - [x] Backend: use `settings.imageStyle` to replace the hard-coded style sentence; fallback to default if missing.
   - [ ] Stage C — LLM-based Prompt Expansion (_exploratory_)
     - [ ] Prototype a single GPT-3.5 call that combines `[concise description, imageStyle]` into a 3-5-sentence rich prompt; batch per store.
     - [ ] Measure added latency/cost; A/B compare image quality with Stage A.

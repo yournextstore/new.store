@@ -5,7 +5,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { pool } from '@/lib/db';
 import { generateAndUploadPlaceholders } from '../../lib/image-generation';
-import { type GenerationMode } from '../../lib/image-generation';
+import type { GenerationMode } from '../../lib/image-generation';
 
 // --- Constants & Types ---
 const EMBEDDING_MODEL = openai.embedding('text-embedding-3-small');
@@ -144,11 +144,13 @@ async function findImageInDB(
  * Handles different image types (product, hero) and alignment requirements.
  * @param json The JSON data (or sub-part) to process.
  * @param imageMode Determines the source for PRODUCT images ('stock' or a generation API identifier).
+ * @param imageStyle The image style (general style for product images consistent with the store concept).
  * @returns The modified JSON data.
  */
 async function replaceImagePlaceholders(
   json: any,
   imageMode: GenerationMode,
+  imageStyle?: string | null,
 ): Promise<any> {
   let totalPlaceholders = 0;
   let successfulMatches = 0;
@@ -327,10 +329,11 @@ async function replaceImagePlaceholders(
 
     // --- Execute Generation Calls (if any) ---
     if (productPlaceholdersToGenerate.length > 0) {
-      // Call the refactored utility function, passing the imageMode
+      // Call the refactored utility function, passing the imageMode, and imageStyle.
       const generationResults = await generateAndUploadPlaceholders(
         productPlaceholdersToGenerate,
         imageMode,
+        imageStyle,
       );
 
       // Create a map for easy lookup of product references
@@ -495,12 +498,23 @@ export async function POST(req: Request) {
       );
     }
 
+    console.log(
+      'Extracted imageStyle from settings:',
+      (generatedJson as any)?.settings?.imageStyle ?? 'Not Found',
+    );
+
+    // Extract imageStyle for passing to the generation function
+    const imageStyle = (generatedJson as any)?.settings?.imageStyle as
+      | string
+      | undefined;
+
     // --- Replace Image Placeholders ---
     console.log('Replacing image placeholders...');
     const startTimeReplace = Date.now();
     const finalJson = await replaceImagePlaceholders(
       generatedJson,
       imageGenerationMode,
+      imageStyle,
     );
     const endTimeReplace = Date.now();
     console.log(
