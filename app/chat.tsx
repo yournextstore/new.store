@@ -279,7 +279,7 @@ export const ChatInner = ({ user }: { user: User }) => {
             </TabsContent>
 
             {/* Display Store URL Link Below JSON */}
-            <TabsContent value="preview">
+            <TabsContent value="preview" className="flex flex-col flex-1">
               {storeUrl ? (
                 <>
                   <a
