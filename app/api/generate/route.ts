@@ -13,6 +13,62 @@ const SIMILARITY_THRESHOLD = 0.45; // Adjust as needed
 const FALLBACK_IMAGE_URL = 'https://via.placeholder.com/300'; // Use a generic placeholder URL if no match found
 const COSINE_DISTANCE_THRESHOLD = 1 - SIMILARITY_THRESHOLD; // pgvector uses distance
 
+// --- Default Theme Definitions ---
+const DEFAULT_GLOBAL_PALETTE_OKLCH = {
+  theme: { background: '100% 0 0' }, // Example from original prompt
+  'theme-primary': { DEFAULT: '50% 0.15 210', background: '95% 0.05 210' }, // Example from original prompt
+  'theme-button': { DEFAULT: '50% 0.15 210', background: '85% 0.1 210' }, // Example from original prompt
+  // Example from original prompt (theme-nav was present in one example)
+  'theme-nav': { DEFAULT: '13.63% 0.0364 259.2', background: '100% 0 0' },
+};
+
+const DEFAULT_SECTION_THEMES_HEX = {
+  HeroSection: {
+    color: '#111827', // Example from original prompt
+    buttonBackgroundColor: '#059669', // Example from original prompt
+    buttonTextColor: '#ffffff', // Example from original prompt
+    buttonHoverBackgroundColor: '#047857', // Example from original prompt
+  },
+  Nav: {
+    backgroundColor: '#ffffff', // Example from original prompt
+    hoverBackgroundColor: '#e5e7eb', // Made up, but plausible hover for white
+    color: '#007bff', // Example from original prompt
+  },
+  Footer: {
+    backgroundColor: '#333333', // Example from original prompt
+    color: '#ffffff', // Example from original prompt
+  },
+  ProductDetails: {
+    color: '#1f2937', // Made up, but plausible text color
+    buttonBackgroundColor: '#059669', // Matching Hero button
+    buttonHoverBackgroundColor: '#047857', // Matching Hero button
+    buttonTextColor: '#ffffff', // Matching Hero button
+  },
+  BannerSection: {
+    backgroundColor: '#f3f4f6', // Made up, light gray
+    textColor: '#1f2937', // Made up, dark gray
+  },
+  // Sections that should have an empty theme object to inherit global styles
+  ProductGrid: {},
+  CollectionGrid: {},
+  Children: {},
+  Title: {},
+  Markdown: {},
+  ProductDescription: {},
+  RelatedProducts: {},
+  ReviewList: {},
+  FeatureSection: {},
+  CategoryMenu: {
+    // Although out of scope in prompt, if it appears, give it a theme like Nav
+    backgroundColor: '#ffffff',
+    hoverBackgroundColor: '#e5e7eb',
+    color: '#007bff',
+  },
+  Breadcrumbs: {},
+  QuestionList: {},
+};
+// --- End Default Theme Definitions ---
+
 // --- New Database Query Function ---
 async function findImageInDB(
   description: string,
@@ -136,6 +192,79 @@ async function findImageInDB(
   }
 
   return bestMatchUrl;
+}
+
+/**
+ * Injects a default theme (global and section-specific colors) into the AI-generated JSON.
+ * @param json The AI-generated JSON data.
+ * @returns The JSON data with the default theme injected.
+ */
+function injectDefaultTheme(json: any): any {
+  if (!json || typeof json !== 'object') {
+    console.warn('injectDefaultTheme: Invalid JSON input, returning as is.');
+    return json;
+  }
+
+  // Inject global colors
+  if (!json.settings) {
+    json.settings = {};
+  }
+  if (json.settings.colors) {
+    console.warn(
+      'injectDefaultTheme: AI unexpectedly generated settings.colors. Overwriting with default.',
+    );
+  }
+  json.settings.colors = {
+    palette: DEFAULT_GLOBAL_PALETTE_OKLCH,
+    paletteName: 'default', // Set a default palette name
+  };
+
+  // Inject section themes
+  if (json.paths && typeof json.paths === 'object') {
+    for (const pathKey in json.paths) {
+      if (Array.isArray(json.paths[pathKey])) {
+        for (const section of json.paths[pathKey]) {
+          // Use section.id (expecting AI to output 'id' now based on updated prompt)
+          if (section?.id && typeof section.id === 'string') {
+            if (section.theme) {
+              console.warn(
+                // Use section.id in log message
+                `injectDefaultTheme: AI unexpectedly generated theme for section ${section.id}. Overwriting with default.`,
+              );
+            }
+            if (
+              Object.prototype.hasOwnProperty.call(
+                DEFAULT_SECTION_THEMES_HEX,
+                section.id, // Use section.id for lookup
+              )
+            ) {
+              section.theme =
+                DEFAULT_SECTION_THEMES_HEX[
+                  section.id as keyof typeof DEFAULT_SECTION_THEMES_HEX // Use section.id for access
+                ];
+            } else {
+              // If a section type is not in our default map, it should likely still have a theme object,
+              // possibly empty, if the YNS API expects it.
+              // For now, let's assume an empty theme object is safer than 'undefined' or deleting the key
+              // if the section type is unrecognized but a theme property might be expected.
+              console.warn(
+                // Use section.id in log message
+                `injectDefaultTheme: Section ${section.id} has no specific default theme in map. Setting theme: {}.`,
+              );
+              section.theme = {}; // Assign an empty object for unmapped sections
+            }
+          } else {
+            // Log if a section doesn't have an 'id' or if it's not a string
+            console.warn(
+              'injectDefaultTheme: Encountered a section without a valid string `id` property:',
+              section,
+            );
+          }
+        }
+      }
+    }
+  }
+  return json;
 }
 
 /**
@@ -498,23 +627,38 @@ export async function POST(req: Request) {
       );
     }
 
+    // Log the raw JSON from AI before any modifications
     console.log(
-      'Extracted imageStyle from settings:',
-      (generatedJson as any)?.settings?.imageStyle ?? 'Not Found',
+      'Raw JSON from AI (before theme injection):',
+      JSON.stringify(generatedJson, null, 2),
     );
 
-    // Extract imageStyle for passing to the generation function
+    // Extract imageStyle from the original AI output, as it's independent of theme injection.
     const imageStyle = (generatedJson as any)?.settings?.imageStyle as
       | string
       | undefined;
+    console.log(
+      'Extracted imageStyle from settings:',
+      imageStyle ?? 'Not Found',
+    );
+
+    // Inject the default theme (this does not affect imageStyle)
+    const themedJson = injectDefaultTheme(generatedJson);
+
+    // Log the JSON AFTER theme injection
+    console.log(
+      'JSON after theme injection (before image replacement):',
+      JSON.stringify(themedJson, null, 2),
+    );
 
     // --- Replace Image Placeholders ---
     console.log('Replacing image placeholders...');
     const startTimeReplace = Date.now();
+    // imageStyle is already extracted from the original generatedJson
     const finalJson = await replaceImagePlaceholders(
-      generatedJson,
+      themedJson, // Use the JSON with themes injected
       imageGenerationMode,
-      imageStyle,
+      imageStyle, // Pass the original imageStyle
     );
     const endTimeReplace = Date.now();
     console.log(
@@ -549,7 +693,7 @@ export async function POST(req: Request) {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${ynsApiKey}`,
         },
-        body: JSON.stringify(finalJson), // Send the JSON with replaced image URLs
+        body: JSON.stringify(finalJson), // Send the JSON with injected themes and image URLs
       });
 
       if (!ynsResponse.ok) {
@@ -586,7 +730,7 @@ export async function POST(req: Request) {
       // Return the YNS store URL, the *final* JSON (with replaced images), and generation times
       return NextResponse.json({
         storeUrl: ynsResult.url,
-        storeJson: finalJson, // Return the modified JSON
+        storeJson: finalJson, // Return the modified JSON (which now includes injected themes and replaced images)
         generationTimeMs,
         imageReplacementTimeMs: endTimeReplace - startTimeReplace,
       });

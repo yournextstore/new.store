@@ -915,7 +915,7 @@ The shoe is the only object in the frame, centered horizontally, with soft, diff
 - [ ] Task: *(Optional/If Needed)* Apply Consistency Strategy to Hero Images.
     - [ ] Implement chosen product consistency strategy (Reference/Rich prompts) if needed for heroes.
 
-### 8.6 Predetermined Color Palettes (Deferred)
+### 8.6 Predetermined Color Palettes
 
 #### 8.6.1 Goals & Overview
 
@@ -931,9 +931,9 @@ This workstream aims to improve the reliability and maintainability of store col
 
 *(This workstream is deferred until Image Generation Enhancements are further along)*
 
-- [ ] **Task: Refactor Prompt & Backend for Colors (Default Injection)**
-    - [ ] Simplify `gen-store-json-prompt.md` by removing detailed color generation rules.
-    - [ ] Modify backend (`/api/generate/route.ts`) to inject a hardcoded *default* theme (OKLCH & hex values) if the LLM provides no color information.
+- [x] **Task: Refactor Prompt & Backend for Colors (Default Injection)**
+    - [x] Simplify `gen-store-json-prompt.md` by removing detailed color generation rules.
+    - [x] Modify backend (`/api/generate/route.ts`) to inject a hardcoded *default* theme (OKLCH & hex values) with colors and values taken from the prompt (if we find them there).
 - [ ] **Task: Implement Predefined Color Palettes (Named Palettes)**
     - [ ] Define 1-2 named palettes (OKLCH/hex values) in code (e.g., `constants/palettes.ts`).
     - [ ] Update the (simplified) prompt to instruct the LLM to output a `settings.chosenPaletteName`.
