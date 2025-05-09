@@ -7,12 +7,6 @@ import type { GenerationMode } from '../../lib/image-generation';
 import { injectDefaultTheme } from '../../lib/theme';
 import { replaceImagePlaceholders } from '../../lib/image';
 
-// --- Constants & Types ---
-
-// --- Default Theme Definitions ---
-
-// --- New Database Query Function ---
-
 /**
  * Injects a default theme (global and section-specific colors) into the AI-generated JSON.
  * @param json The AI-generated JSON data.
