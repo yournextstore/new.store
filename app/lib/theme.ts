@@ -7,125 +7,84 @@
  * AI's task by offloading theme generation to the backend.
  */
 
-// --- Default Theme Definitions ---
-export const DEFAULT_GLOBAL_PALETTE_OKLCH = {
-  theme: { background: '100% 0 0' }, // Example from original prompt
-  'theme-primary': { DEFAULT: '50% 0.15 210', background: '95% 0.05 210' }, // Example from original prompt
-  'theme-button': { DEFAULT: '50% 0.15 210', background: '85% 0.1 210' }, // Example from original prompt
-  // Example from original prompt (theme-nav was present in one example)
-  'theme-nav': { DEFAULT: '13.63% 0.0364 259.2', background: '100% 0 0' },
-};
-
-export const DEFAULT_SECTION_THEMES_HEX = {
-  HeroSection: {
-    color: '#111827', // Example from original prompt
-    buttonBackgroundColor: '#059669', // Example from original prompt
-    buttonTextColor: '#ffffff', // Example from original prompt
-    buttonHoverBackgroundColor: '#047857', // Example from original prompt
-  },
-  Nav: {
-    backgroundColor: '#ffffff', // Example from original prompt
-    hoverBackgroundColor: '#e5e7eb', // Made up, but plausible hover for white
-    color: '#007bff', // Example from original prompt
-  },
-  Footer: {
-    backgroundColor: '#333333', // Example from original prompt
-    color: '#ffffff', // Example from original prompt
-  },
-  ProductDetails: {
-    color: '#1f2937', // Made up, but plausible text color
-    buttonBackgroundColor: '#059669', // Matching Hero button
-    buttonHoverBackgroundColor: '#047857', // Matching Hero button
-    buttonTextColor: '#ffffff', // Matching Hero button
-  },
-  BannerSection: {
-    backgroundColor: '#f3f4f6', // Made up, light gray
-    textColor: '#1f2937', // Made up, dark gray
-  },
-  // Sections that should have an empty theme object to inherit global styles
-  ProductGrid: {},
-  CollectionGrid: {},
-  Children: {},
-  Title: {},
-  Markdown: {},
-  ProductDescription: {},
-  RelatedProducts: {},
-  ReviewList: {},
-  FeatureSection: {},
-  CategoryMenu: {
-    // Although out of scope in prompt, if it appears, give it a theme like Nav
-    backgroundColor: '#ffffff',
-    hoverBackgroundColor: '#e5e7eb',
-    color: '#007bff',
-  },
-  Breadcrumbs: {},
-  QuestionList: {},
-};
-// --- End Default Theme Definitions ---
+import type { ColorPalette } from '../../constants/palettes';
+import { AVAILABLE_PALETTES, DEFAULT_PALETTE } from '../../constants/palettes';
 
 /**
- * Injects a default theme (global and section-specific colors) into the AI-generated JSON.
+ * Applies a chosen or default theme (global and section-specific colors) to the AI-generated JSON.
  * @param json The AI-generated JSON data.
- * @returns The JSON data with the default theme injected.
+ * @param chosenPaletteName The name of the palette chosen by the AI, or null/undefined to use default.
+ * @returns The JSON data with the theme injected.
  */
-export function injectDefaultTheme(json: any): any {
+export function applyTheme(json: any, chosenPaletteName?: string | null): any {
   if (!json || typeof json !== 'object') {
-    console.warn('injectDefaultTheme: Invalid JSON input, returning as is.');
+    console.warn('applyTheme: Invalid JSON input, returning as is.');
     return json;
   }
 
-  // Inject global colors
+  let paletteToApply: ColorPalette = DEFAULT_PALETTE;
+  if (chosenPaletteName && AVAILABLE_PALETTES[chosenPaletteName]) {
+    paletteToApply = AVAILABLE_PALETTES[chosenPaletteName];
+    console.log(`applyTheme: Applying chosen palette: ${chosenPaletteName}`);
+  } else {
+    console.log(
+      `applyTheme: Applying default palette: ${DEFAULT_PALETTE.name}`,
+    );
+    if (chosenPaletteName) {
+      console.warn(
+        `applyTheme: Chosen palette name "${chosenPaletteName}" not found. Falling back to default.`,
+      );
+    }
+  }
+
+  // Ensure settings and settings.colors objects exist
   if (!json.settings) {
     json.settings = {};
   }
-  if (json.settings.colors) {
+  if (!json.settings.colors) {
+    json.settings.colors = {};
+  }
+
+  // Inject global colors from the selected palette
+  if (json.settings.colors.palette) {
     console.warn(
-      'injectDefaultTheme: AI unexpectedly generated settings.colors. Overwriting with default.',
+      'applyTheme: AI unexpectedly generated settings.colors.palette. Overwriting with selected palette.',
     );
   }
-  json.settings.colors = {
-    palette: DEFAULT_GLOBAL_PALETTE_OKLCH,
-    paletteName: 'default', // Set a default palette name
-  };
+  json.settings.colors.palette = paletteToApply.globalPalette;
+  json.settings.colors.paletteName = paletteToApply.name;
 
-  // Inject section themes
+  // Inject section themes from the selected palette
   if (json.paths && typeof json.paths === 'object') {
     for (const pathKey in json.paths) {
       if (Array.isArray(json.paths[pathKey])) {
         for (const section of json.paths[pathKey]) {
-          // Use section.id (expecting AI to output 'id' now based on updated prompt)
           if (section?.id && typeof section.id === 'string') {
             if (section.theme) {
               console.warn(
-                // Use section.id in log message
-                `injectDefaultTheme: AI unexpectedly generated theme for section ${section.id}. Overwriting with default.`,
+                `applyTheme: AI unexpectedly generated theme for section ${section.id}. Overwriting with selected palette.`,
               );
             }
-            if (
-              Object.prototype.hasOwnProperty.call(
-                DEFAULT_SECTION_THEMES_HEX,
-                section.id, // Use section.id for lookup
-              )
-            ) {
-              section.theme =
-                DEFAULT_SECTION_THEMES_HEX[
-                  section.id as keyof typeof DEFAULT_SECTION_THEMES_HEX // Use section.id for access
-                ];
+
+            const sectionThemeFromPalette =
+              paletteToApply.sectionThemes[
+                section.id as keyof typeof paletteToApply.sectionThemes
+              ];
+
+            if (sectionThemeFromPalette) {
+              section.theme = sectionThemeFromPalette;
             } else {
-              // If a section type is not in our default map, it should likely still have a theme object,
-              // possibly empty, if the YNS API expects it.
-              // For now, let's assume an empty theme object is safer than 'undefined' or deleting the key
-              // if the section type is unrecognized but a theme property might be expected.
+              // If a section type is not in our selected palette's sectionThemes map,
+              // assign an empty theme object. This handles sections that don't have
+              // specific theme overrides in the palette or are new/unrecognized.
               console.warn(
-                // Use section.id in log message
-                `injectDefaultTheme: Section ${section.id} has no specific default theme in map. Setting theme: {}.`,
+                `applyTheme: Section ${section.id} has no specific theme in palette "${paletteToApply.name}". Setting theme: {}.`,
               );
-              section.theme = {}; // Assign an empty object for unmapped sections
+              section.theme = {};
             }
           } else {
-            // Log if a section doesn't have an 'id' or if it's not a string
             console.warn(
-              'injectDefaultTheme: Encountered a section without a valid string `id` property:',
+              'applyTheme: Encountered a section without a valid string `id` property:',
               section,
             );
           }

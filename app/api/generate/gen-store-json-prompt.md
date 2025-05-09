@@ -153,7 +153,8 @@ Below are the section types supported by the Your Next Store platform, along wit
     "fontFamily": "default" | "roboto" | "inter" | "merriweather" | "montserrat" | "nunito" | null,
     "logo": { "imageUrl": string, "width": number | null, "height": number | null } | string | null,
     "ogimage": string | null,
-    "imageStyle": string
+    "imageStyle": string,
+    "chosenPaletteName": string | null
   }
   ```
 - **Fields**:
@@ -164,6 +165,7 @@ Below are the section types supported by the Your Next Store platform, along wit
   - `"logo"`: Store logo as an object with image URL and dimensions, a string URL, or null.
   - `"ogimage"`: Image URL for social sharing (optional; defaults to null).
   - `"imageStyle"`: A description of the desired overall visual style for product and hero images (required).
+  - `"chosenPaletteName"`: The name of the color palette to apply to the store. Select from the list provided in the instructions.
 
 ### Products
 
@@ -230,6 +232,10 @@ Below are the section types supported by the Your Next Store platform, along wit
     - `"Clean product shots on a pure white background with bright, natural lighting and centered composition."`
     - `"Dark, moody photography featuring dramatic shadows, emphasizing texture and luxury."`
     - Fallback example if you can't come up with anything more specific: `"Standard e-commerce product photography with a clean, neutral background."`
+  - `"chosenPaletteName"`: (**Mandatory**) Based on the user's prompt and the overall store concept, select the most appropriate color palette name from the following list. Consider the descriptions provided for each palette. If the user's prompt gives no indication of color or style preference, or if no palette seems like a strong match, you **MUST** choose "Default".
+    - **Available Palettes**:
+      - `"Default"`: "A versatile and neutral theme with light grey backgrounds, dark grey text, and a classic blue accent for calls to action. Suitable for a wide range of stores needing a clean, professional look."
+      - `"MinimalistWarm"`: "A clean, modern, and airy theme with off-white and cream backgrounds, warm grey text, and a touch of earthy terracotta for highlights. Ideal for designs that feel calm, organic, or subtly sophisticated."
 - **Hardcoded Values**:
   - Use hardcoded values for `"logo"` and `"ogimage"` as specified:
     - `"logo"`: { "width": 1024, "height": 1024, "imageUrl": "https://yns.app/icon.png" }

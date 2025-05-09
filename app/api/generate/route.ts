@@ -4,7 +4,7 @@ import { openai } from '@ai-sdk/openai';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { GenerationMode } from '../../lib/image-generation';
-import { injectDefaultTheme } from '../../lib/theme';
+import { applyTheme } from '../../lib/theme';
 import { replaceImagePlaceholders } from '../../lib/image';
 
 /**
@@ -135,8 +135,16 @@ export async function POST(req: Request) {
       imageStyle ?? 'Not Found',
     );
 
-    // Inject the default theme (this does not affect imageStyle)
-    const themedJson = injectDefaultTheme(generatedJson);
+    // Extract chosenPaletteName from the AI output
+    const chosenPaletteName = (generatedJson as any)?.settings
+      ?.chosenPaletteName as string | undefined | null;
+    console.log(
+      'Extracted chosenPaletteName from settings:',
+      chosenPaletteName ?? 'Not specified, will use default',
+    );
+
+    // Apply the chosen or default theme
+    const themedJson = applyTheme(generatedJson, chosenPaletteName);
 
     // Log the JSON AFTER theme injection
     console.log(
