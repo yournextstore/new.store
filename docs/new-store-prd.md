@@ -938,6 +938,7 @@ This workstream aims to improve the reliability and maintainability of store col
     - [x] Define 1-2 named palettes (OKLCH/hex values) in code (e.g., `constants/palettes.ts`).
     - [x] Update the (simplified) prompt to instruct the LLM to output a `settings.chosenPaletteName`.
     - [x] Enhance backend logic to read the chosen name, look up the palette, and inject the specific colors.
+    - [x] Add named color pallete with vibes like "Eco-friendly, wholesome, appealing to health-conscious consumers".
 
 --- 
 

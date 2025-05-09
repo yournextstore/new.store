@@ -236,6 +236,7 @@ Below are the section types supported by the Your Next Store platform, along wit
     - **Available Palettes**:
       - `"Default"`: "A versatile and neutral theme with light grey backgrounds, dark grey text, and a classic blue accent for calls to action. Suitable for a wide range of stores needing a clean, professional look."
       - `"MinimalistWarm"`: "A clean, modern, and airy theme with off-white and cream backgrounds, warm grey text, and a touch of earthy terracotta for highlights. Ideal for designs that feel calm, organic, or subtly sophisticated."
+      - `"ecoFriendlyHealth"`: "A calming and natural theme using earthy tones, soft greens, and off-whites. Perfect for stores emphasizing organic, sustainable, or health-focused products, creating a wholesome and trustworthy feel."
 - **Hardcoded Values**:
   - Use hardcoded values for `"logo"` and `"ogimage"` as specified:
     - `"logo"`: { "width": 1024, "height": 1024, "imageUrl": "https://yns.app/icon.png" }
