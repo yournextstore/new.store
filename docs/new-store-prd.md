@@ -903,10 +903,10 @@ The shoe is the only object in the frame, centered horizontally, with soft, diff
     - [ ] Evaluate stylistic consistency. Document findings and decide on preferred strategy.
 
 **Phase 3: Hero Image Generation**
-- [ ] Task: Enable Text-to-Image Generation for Hero Images.
-    - [ ] Adapt image processing logic to handle hero placeholders based on UI mode.
-    - [ ] Construct appropriate text prompts for hero images.
-    - [ ] Call basic text-to-image functions for selected engine.
+- [x] Task: Enable Text-to-Image Generation for Hero Images.
+    - [x] Adapt image processing logic to handle hero placeholders based on UI mode.
+    - [x] Construct appropriate text prompts for hero images.
+    - [x] Call basic text-to-image functions for selected engine.
 - [ ] Task: Experiment with Hero Image Alignment (Prompt Engineering).
     - [ ] Focus on modifying text prompts to encourage correct composition (left/right empty space). Test across engines.
 - [ ] Task: Implement Hero Image Fallback & Persistence.
