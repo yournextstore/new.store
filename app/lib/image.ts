@@ -9,7 +9,10 @@
 import { openai } from '@ai-sdk/openai';
 import { pool } from '@/lib/db';
 import { embed } from 'ai';
-import { generateAndUploadPlaceholders } from './image-generation'; // Assuming image-generation.ts is in the same app/lib directory
+import {
+  generateAndUploadPlaceholders,
+  processSinglePlaceholder,
+} from './image-generation'; // Assuming image-generation.ts is in the same app/lib directory
 import type { GenerationMode } from './image-generation';
 
 // --- Constants & Types ---
@@ -159,8 +162,11 @@ export async function replaceImagePlaceholders(
 ): Promise<any> {
   let totalPlaceholders = 0;
   let successfulMatches = 0;
-  let generationAttempted = 0;
-  let generationSucceeded = 0;
+  // Separate counters for stats
+  let heroGenerationAttempted = 0;
+  let heroGenerationSucceeded = 0;
+  let productGenerationAttempted = 0;
+  let productGenerationSucceeded = 0;
   const productPlaceholdersToGenerate: {
     originalUrl: string;
     description: string;
@@ -190,9 +196,23 @@ export async function replaceImagePlaceholders(
               }
 
               const placeholderUrl = slide.image.src;
-              const alignment = (
-                slide.boxAlignment?.toLowerCase() === 'right' ? 'right' : 'left'
-              ) as 'left' | 'right'; // Default to left if invalid/missing
+
+              let alignmentForDbLookup: 'left' | 'right' | undefined =
+                undefined; // For findImageInDB
+              let alignmentForGeneration: 'left' | 'right' | 'center' = 'left'; // For processSinglePlaceholder
+
+              const rawAlignment = slide.data?.boxAlignment?.toLowerCase();
+              if (rawAlignment === 'right') {
+                alignmentForDbLookup = 'right';
+                alignmentForGeneration = 'right';
+              } else if (rawAlignment === 'left') {
+                alignmentForDbLookup = 'left';
+                alignmentForGeneration = 'left';
+              } else if (rawAlignment === 'center') {
+                // findImageInDB doesn't support 'center', so lookup is undefined
+                // generation prompt *will* use 'center'
+                alignmentForGeneration = 'center';
+              }
 
               try {
                 const url = new URL(placeholderUrl);
@@ -200,23 +220,74 @@ export async function replaceImagePlaceholders(
 
                 if (description) {
                   totalPlaceholders++; // Count all valid placeholders
-                  const bestMatchUrl = await findImageInDB(
-                    description,
-                    'hero',
-                    alignment,
-                  );
 
-                  if (bestMatchUrl) {
-                    slide.image.src = bestMatchUrl;
-                    successfulMatches++; // Increment for successful DB lookup
+                  if (imageMode === 'stock') {
+                    // --- STOCK MODE (Existing DB Lookup for Heroes) ---
                     console.log(
-                      `Hero Image Match: Replaced placeholder for alignment "${alignment}" with ${bestMatchUrl}`,
+                      `[Stock Mode] Hero Image Request: Align "${alignmentForGeneration}", Desc: "${description.substring(0, 50)}..."`,
                     );
+                    const stockMatchUrl = await findImageInDB(
+                      description,
+                      'hero',
+                      alignmentForDbLookup,
+                    );
+                    if (stockMatchUrl) {
+                      slide.image.src = stockMatchUrl;
+                      successfulMatches++;
+                      console.log(
+                        `[Stock Mode] Hero Image Match: Replaced placeholder for alignment "${alignmentForGeneration}" with ${stockMatchUrl}`,
+                      );
+                    } else {
+                      slide.image.src = FALLBACK_IMAGE_URL;
+                      console.warn(
+                        `[Stock Mode] Hero Fallback (Stock): No DB match for alignment "${alignmentForGeneration}". Using fallback.`,
+                      );
+                    }
                   } else {
-                    slide.image.src = FALLBACK_IMAGE_URL;
-                    console.warn(
-                      `Hero Fallback Final: No image found matching alignment "${alignment}" for description "${description}". Using fallback URL.`,
+                    // --- GENERATE MODE for Heroes ---
+                    heroGenerationAttempted++;
+                    console.log(
+                      `[Generate Mode - ${imageMode}] Hero Image Request: Align "${alignmentForGeneration}", Desc: "${description.substring(0, 50)}..."`,
                     );
+                    // Call processSinglePlaceholder directly for hero images
+                    const result = await processSinglePlaceholder(
+                      { originalUrl: placeholderUrl, description },
+                      imageMode, // Pass the selected generationMode
+                      'hero',
+                      alignmentForGeneration, // This is 'left' | 'right' | 'center'
+                      // imageStyle is not used for heroes based on prior discussion
+                      null,
+                    );
+
+                    if (result?.blobUrl) {
+                      slide.image.src = result.blobUrl;
+                      heroGenerationSucceeded++;
+                      console.log(
+                        `[Generate Mode - ${imageMode}] Hero Image Success: Replaced placeholder for alignment "${alignmentForGeneration}" with ${result.blobUrl}`,
+                      );
+                    } else {
+                      console.warn(
+                        `[Generate Mode - ${imageMode}] Hero Generation Failed for alignment "${alignmentForGeneration}". Attempting stock fallback.`,
+                      );
+                      // Fallback to stock image search
+                      const stockFallbackUrl = await findImageInDB(
+                        description,
+                        'hero',
+                        alignmentForDbLookup,
+                      );
+                      if (stockFallbackUrl) {
+                        slide.image.src = stockFallbackUrl;
+                        // Note: generationAttempted was already incremented. We don't count this as a generationSucceeded.
+                        console.log(
+                          `[Generate Mode - ${imageMode}] Hero Stock Fallback Success: Used ${stockFallbackUrl}`,
+                        );
+                      } else {
+                        slide.image.src = FALLBACK_IMAGE_URL;
+                        console.warn(
+                          `[Generate Mode - ${imageMode}] Hero Stock Fallback Failed for alignment "${alignmentForGeneration}". Using final fallback URL.`,
+                        );
+                      }
+                    }
                   }
                 } else {
                   console.warn(
@@ -294,7 +365,7 @@ export async function replaceImagePlaceholders(
                 description: description,
                 productRef: product, // Keep reference to modify later
               });
-              generationAttempted++;
+              productGenerationAttempted++;
               // NOTE: We don't set fallback URL here yet. It's done after all generation calls.
             } else {
               // --- STOCK PATH (Existing DB Lookup) ---
@@ -359,7 +430,7 @@ export async function replaceImagePlaceholders(
               `[Generate Mode] Failed to generate/upload image for placeholder ${result.originalUrl}. Using fallback.`,
             );
           } else {
-            generationSucceeded++;
+            productGenerationSucceeded++;
             console.log(
               `[Generate Mode] Successfully processed image for ${result.originalUrl}. Final URL: ${result.blobUrl}`,
             );
@@ -379,15 +450,25 @@ export async function replaceImagePlaceholders(
   if (totalPlaceholders > 0) {
     console.log('--- Image Placeholder Stats ---');
     console.log(`Total Placeholders Found: ${totalPlaceholders}`);
-    if (generationAttempted > 0) {
-      // Log detailed stats for generation mode
-      const dbLookupsAttempted = totalPlaceholders - generationAttempted;
+
+    const totalGenerationAttempted =
+      heroGenerationAttempted + productGenerationAttempted;
+
+    if (totalGenerationAttempted > 0) {
+      const dbLookupsAttempted = totalPlaceholders - totalGenerationAttempted;
       console.log(
-        `  DB Lookups (Hero/Other): Attempted=${dbLookupsAttempted}, Matched=${successfulMatches}`,
+        `  DB Lookups (Stock/Fallback): Attempted=${dbLookupsAttempted}, Matched=${successfulMatches}`,
       );
-      console.log(
-        `  Generation (Product):   Attempted=${generationAttempted}, Succeeded=${generationSucceeded}`,
-      );
+      if (heroGenerationAttempted > 0) {
+        console.log(
+          `  Generation (Hero):      Attempted=${heroGenerationAttempted}, Succeeded=${heroGenerationSucceeded}`,
+        );
+      }
+      if (productGenerationAttempted > 0) {
+        console.log(
+          `  Generation (Product):   Attempted=${productGenerationAttempted}, Succeeded=${productGenerationSucceeded}`,
+        );
+      }
     } else {
       // Log simpler stats for stock mode
       const successRate = (

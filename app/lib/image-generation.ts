@@ -120,8 +120,10 @@ async function insertImageRecord(data: {
   filename: string;
   shortName: string | null;
   blob_pathname: string;
-  source: string;
+  source: string; // Source API ('getimg.ai', 'fal.ai-flux-1.1-pro', etc.)
   generationPrompt?: string;
+  imageType: 'product' | 'hero'; // Added: Type of image
+  layoutHint?: 'left' | 'right' | 'center' | null; // Added: Layout hint for heroes
 }): Promise<boolean> {
   if (!pool) {
     console.error('[DB Util] Database pool is not available. Cannot insert.');
@@ -147,8 +149,8 @@ async function insertImageRecord(data: {
       data.filename,
       data.shortName, // Can be null
       data.blob_pathname,
-      null, // layout_hint is null for product images
-      'product', // image_type
+      data.layoutHint ?? null, // Use provided hint or null
+      data.imageType, // Use provided type
       data.source,
       data.generationPrompt,
     ]);
@@ -175,10 +177,10 @@ interface ImagePlaceholder {
   description: string;
 }
 
-// Interface for the result returned by the orchestrator
+// Interface for the result of processing a single placeholder
 interface ProcessedImageResult {
   originalUrl: string;
-  blobUrl: string | null; // Remains the primary return value for the route
+  blobUrl: string | null; // null if processing failed
 }
 
 /**
@@ -186,12 +188,16 @@ interface ProcessedImageResult {
  * uploads, calculates hash, generates embedding & shortName, inserts into DB.
  * @param placeholder The image placeholder object.
  * @param generationMode The selected image generation mode/API.
+ * @param imageType The type of the image.
+ * @param alignment The alignment of the image.
  * @param imageStyle The image style (general style for product images consistent with the store concept).
  * @returns A promise resolving to the ProcessedImageResult.
  */
-async function processSinglePlaceholder(
+export async function processSinglePlaceholder(
   placeholder: ImagePlaceholder,
   generationMode: GenerationMode,
+  imageType: 'product' | 'hero',
+  alignment?: 'left' | 'right' | 'center' | null,
   imageStyle?: string | null,
 ): Promise<ProcessedImageResult> {
   // Variables to hold intermediate results
@@ -218,21 +224,44 @@ async function processSinglePlaceholder(
       placeholder.description,
     );
 
-    // Define the default style template
-    const defaultStyle = `Displayed in perfect profile against a plain light-grey studio background, centred, soft diffused lighting.\n\nClean, calm, modern — ideal for premium e-commerce display.`;
+    let modifiedPrompt = '';
 
-    // Use provided imageStyle or fallback to default
-    const finalStyle = imageStyle?.trim() ? imageStyle : defaultStyle;
+    if (imageType === 'hero') {
+      // Construct prompt for Hero images, incorporating alignment
+      let alignmentInstruction = '';
+      if (alignment === 'left') {
+        alignmentInstruction =
+          'The image is aligned to the right, leaving the left side blank or with a neutral background suitable for text overlay.';
+      } else if (alignment === 'right') {
+        alignmentInstruction =
+          'The image is aligned to the left, leaving the right side blank or with a neutral background suitable for text overlay.';
+      } else if (alignment === 'center') {
+        // TODO: Define center alignment instruction if needed
+        alignmentInstruction =
+          'The main subject is centered, potentially with balanced neutral space on both sides.'; // Placeholder
+      }
+      modifiedPrompt = `${placeholder.description}. ${alignmentInstruction}`;
+      // Note: imageStyle is currently ignored for heroes, based on user feedback.
+      console.log(
+        `[Image Gen Util - ${generationMode}] Using Style: Alignment-based Prompt (Hero)`,
+      );
+    } else if (imageType === 'product') {
+      // Construct prompt for Product images (existing logic)
+      const defaultStyle = `Displayed in perfect profile against a plain light-grey studio background, centred, soft diffused lighting.\\n\\nClean, calm, modern — ideal for premium e-commerce display.`;
+      const finalStyle = imageStyle?.trim() ? imageStyle : defaultStyle;
+      modifiedPrompt = `${placeholder.description}\\n\\n${finalStyle}`;
+      console.log(
+        `[Image Gen Util - ${generationMode}] Using Style:`,
+        imageStyle?.trim()
+          ? `"${imageStyle}" (From Settings)`
+          : 'Default Template',
+      );
+    } else {
+      // Should not happen with current types, but good practice to handle
+      console.error(`[Image Gen Util] Unknown imageType: ${imageType}`);
+      throw new Error(`Unsupported imageType: ${imageType}`);
+    }
 
-    // Construct the prompt using the description and the selected style
-    const modifiedPrompt = `${placeholder.description}\n\n${finalStyle}`;
-
-    console.log(
-      `[Image Gen Util - ${generationMode}] Using Style:`,
-      imageStyle?.trim()
-        ? `"${imageStyle}" (From Settings)`
-        : 'Default Template',
-    );
     console.log(
       `[Image Gen Util - ${generationMode}] Final generation prompt:`,
       modifiedPrompt,
@@ -355,6 +384,8 @@ async function processSinglePlaceholder(
       blob_pathname: finalBlobPathname,
       source: sourceApi, // Pass the determined source API
       generationPrompt: modifiedPrompt,
+      imageType: imageType, // Pass the determined image type
+      layoutHint: imageType === 'hero' ? alignment : null, // Pass alignment as hint only for heroes
     });
     if (!dbSuccess) {
       throw new Error('Database insertion failed');
@@ -394,7 +425,7 @@ export async function generateAndUploadPlaceholders(
 
   // Process placeholders concurrently
   const processingPromises = placeholders.map((p) =>
-    processSinglePlaceholder(p, generationMode, imageStyle),
+    processSinglePlaceholder(p, generationMode, 'product', null, imageStyle),
   );
 
   // Wait for all operations to settle
