@@ -44,7 +44,7 @@ export const ChatInner = ({ user }: { user: User }) => {
   const [prompt, setPrompt] = useState('');
   // State for image generation mode
   const [imageGenerationMode, setImageGenerationMode] =
-    useState<GenerationMode>('stock');
+    useState<GenerationMode>('fal.ai-flux-1.1-pro');
   // State for JSON response
   const [responseJson, setResponseJson] = useState<object | null>(null);
   const [storeUrl, setStoreUrl] = useState<string | null>(null); // State for store URL
