@@ -14,15 +14,7 @@
 // }
 
 import Link from 'next/link';
-import Image from 'next/image';
-import {
-  ArrowRight,
-  Sparkles,
-  Zap,
-  ShoppingBag,
-  Clock,
-  Code,
-} from 'lucide-react';
+import { ArrowRight, Sparkles } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { ChatInner } from './chat';
@@ -44,7 +36,7 @@ export default async function LandingPage() {
             <span>new.store</span>
           </div>
           <div className="flex flex-1 items-center justify-end space-x-4">
-            <nav className="flex items-center space-x-1"></nav>
+            <nav className="flex items-center space-x-1" />
           </div>
         </div>
       </header>
