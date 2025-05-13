@@ -1001,9 +1001,9 @@ This workstream introduces features for users to track their generated stores an
     - [x] **1.1: Database - Initial Schema & Persistence:**
         - [x] Define and create the minimal `generated_stores` table.
         - [x] Modify `/api/generate/route.ts` to extract `hero_image_url` and save essential store data to `generated_stores`.
-    - [ ] **1.2: Backend - "My Stores" API Endpoints:**
-        - [ ] Create `GET /api/me/stores`.
-        - [ ] Create `PATCH /api/me/stores/{store_id}/star`.
+    - [x] **1.2: Backend - "My Stores" API Endpoints:**
+        - [x] Create `GET /api/me/stores`.
+        - [x] Create `PATCH /api/me/stores/{store_id}/star`.
     - [ ] **1.3: Frontend - "My Stores" Page:**
         - [ ] Develop the `/my-stores` page: list user's stores with details, preview, link, and star button. Implement starred filter.
 
