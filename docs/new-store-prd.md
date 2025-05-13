@@ -907,8 +907,9 @@ The shoe is the only object in the frame, centered horizontally, with soft, diff
     - [x] Adapt image processing logic to handle hero placeholders based on UI mode.
     - [x] Construct appropriate text prompts for hero images.
     - [x] Call basic text-to-image functions for selected engine.
-- [ ] Task: Experiment with Hero Image Alignment (Prompt Engineering).
-    - [ ] Focus on modifying text prompts to encourage correct composition (left/right empty space). Test across engines.
+- [x] Task: Experiment with Hero Image Alignment (Prompt Engineering).
+    - [x] Focus on modifying text prompts to encourage correct composition (left/right empty space). Test across engines.
+    - Result: OpenAI `gpt-image-1` was the only engine that could generate hero images with the right composition.
 - [ ] Task: Implement Hero Image Fallback & Persistence.
     - [ ] Handle errors/poor alignment (e.g., fallback to DB stock).
     - [ ] Integrate persistence (upload, hash, embed, DB insert), consider `layout_hint`.
@@ -939,6 +940,4 @@ This workstream aims to improve the reliability and maintainability of store col
     - [x] Update the (simplified) prompt to instruct the LLM to output a `settings.chosenPaletteName`.
     - [x] Enhance backend logic to read the chosen name, look up the palette, and inject the specific colors.
     - [x] Add named color pallete with vibes like "Eco-friendly, wholesome, appealing to health-conscious consumers".
-
---- 
 
