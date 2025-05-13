@@ -1023,3 +1023,11 @@ This workstream introduces features for users to track their generated stores an
 -   **Hero Image Extraction:** Backend logic in `/api/generate` needs to reliably parse `finalJson` for a suitable `hero_image_url` (e.g., from `HeroSection.data.image.src` or `HeroSection.data.slides[0].image.src`).
 -   **Voting Scope:** Initially restricted to logged-in users.
 -   **Vote Calculation:** Net votes for the showcase will be calculated on-the-fly by querying/aggregating data from the `store_votes` table.
+-   **Voting Mechanism & State Management:**
+    *   **States:** A user's vote for a store can be `upvoted`, `downvoted`, or `neutral`.
+    *   **Database Representation:** In the `store_votes` table, `vote_type` will store `'up'` or `'down'`. A `neutral` state is represented by the absence of a row for the specific `(store_id, user_id)` pair.
+    *   **API Interaction (`POST /api/showcase/stores/{store_id}/vote`):** The client sends the user's intended vote action, e.g., `{ "vote": "up" }` or `{ "vote": "down" }`.
+    *   **State Transitions & Backend Logic:**
+        *   If a user votes (e.g., sends `{ "vote": "up" }`) and their current vote is the same (already 'up'), the vote is neutralized (row deleted).
+        *   If their current vote is different (e.g., 'down' or neutral), the vote is set/updated to the new type ('up') (row inserted/updated).
+        *   The `store_votes.created_at` timestamp is updated upon each successful vote action (insert or update) to reflect the time of the latest interaction.

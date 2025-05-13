@@ -45,3 +45,19 @@ CREATE TABLE generated_stores (
     is_starred BOOLEAN DEFAULT FALSE NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
+
+CREATE TABLE store_votes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    store_id UUID NOT NULL REFERENCES generated_stores(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL,
+    user_email TEXT NULL, -- For easier debugging, matches generated_stores
+    vote_type TEXT NOT NULL CHECK (vote_type IN ('up', 'down')), -- 'up' or 'down'
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    CONSTRAINT unique_user_store_vote UNIQUE (user_id, store_id)
+);
+
+-- Optional: Index for faster lookups if querying votes for a specific store
+CREATE INDEX IF NOT EXISTS idx_store_votes_store_id ON store_votes(store_id);
+
+-- Optional: Index for faster lookups of a user's votes (though covered by unique_user_store_vote for single lookups)
+CREATE INDEX IF NOT EXISTS idx_store_votes_user_id ON store_votes(user_id);
