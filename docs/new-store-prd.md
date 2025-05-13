@@ -975,6 +975,7 @@ This workstream introduces features for users to track their generated stores an
     *   `id` (UUID, PK)
     *   `store_id` (UUID, FK to `generated_stores.id`)
     *   `user_id` (TEXT NOT NULL, identifies the voter)
+    *   `user_email` (TEXT, nullable, email of the voter for easier debugging)
     *   `vote_type` (TEXT, e.g., 'up' or 'down')
     *   `created_at` (TIMESTAMP WITH TIME ZONE, default `CURRENT_TIMESTAMP`)
     *   *Constraint: Unique on (`store_id`, `user_id`)*
