@@ -964,6 +964,7 @@ This workstream introduces features for users to track their generated stores an
 1.  **`generated_stores` Table:**
     *   `id` (UUID, PK)
     *   `user_id` (TEXT NOT NULL, identifies the creator)
+    *   `user_email` (TEXT, nullable, email of the creator for easier debugging)
     *   `prompt_text` (TEXT NOT NULL)
     *   `store_url` (TEXT NOT NULL, from YNS)
     *   `hero_image_url` (TEXT, extracted from `finalJson` for preview)
@@ -997,9 +998,9 @@ This workstream introduces features for users to track their generated stores an
 **Workstream 1: "My Stores" - Personal Library & Starring**
 *   **Goal:** Allow a user to see a list of their generated stores and star their favorites.
 *   **Tasks:**
-    - [ ] **1.1: Database - Initial Schema & Persistence:**
-        - [ ] Define and create the minimal `generated_stores` table.
-        - [ ] Modify `/api/generate/route.ts` to extract `hero_image_url` and save essential store data to `generated_stores`.
+    - [x] **1.1: Database - Initial Schema & Persistence:**
+        - [x] Define and create the minimal `generated_stores` table.
+        - [x] Modify `/api/generate/route.ts` to extract `hero_image_url` and save essential store data to `generated_stores`.
     - [ ] **1.2: Backend - "My Stores" API Endpoints:**
         - [ ] Create `GET /api/me/stores`.
         - [ ] Create `PATCH /api/me/stores/{store_id}/star`.

@@ -34,3 +34,14 @@ CREATE INDEX ON images USING hnsw (embedding vector_cosine_ops);
 
 -- Optional: Standard index for potential text searches on description
 -- CREATE INDEX ON images USING gin (description gin_trgm_ops); 
+
+CREATE TABLE generated_stores (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id TEXT NOT NULL,
+    user_email TEXT NOT NULL,
+    prompt_text TEXT NOT NULL,
+    store_url TEXT NOT NULL,
+    hero_image_url TEXT NOT NULL,
+    is_starred BOOLEAN DEFAULT FALSE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+);

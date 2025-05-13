@@ -3,9 +3,13 @@ import { generateText } from 'ai';
 import { openai } from '@ai-sdk/openai';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import type { PoolClient } from 'pg'; // Import PoolClient for typing
 import type { GenerationMode } from '../../lib/image-generation';
 import { applyTheme } from '../../lib/theme';
 import { replaceImagePlaceholders } from '../../lib/image';
+import { pool } from '@/lib/db'; // Using @ alias for path
+import { auth } from '@/lib/auth'; // For getting user session
+import { headers } from 'next/headers'; // For getting headers for session
 
 /**
  * Injects a default theme (global and section-specific colors) into the AI-generated JSON.
@@ -23,6 +27,37 @@ import { replaceImagePlaceholders } from '../../lib/image';
  * @returns The modified JSON data.
  */
 
+// Helper function to extract Hero Image URL
+function extractHeroImageUrl(json: any): string | null {
+  try {
+    const homepageSections = json?.paths?.['/'];
+    if (Array.isArray(homepageSections)) {
+      const heroSection = homepageSections.find(
+        (section: any) => section.id === 'HeroSection',
+      );
+      if (
+        heroSection?.data?.image?.src &&
+        typeof heroSection.data.image.src === 'string'
+      ) {
+        return heroSection.data.image.src;
+      } else {
+        console.warn(
+          'HeroSection found, but image.src is missing, not a string, or path is invalid:',
+          heroSection?.data,
+        );
+        return null; // Hero image path not as expected
+      }
+    }
+    console.warn(
+      "Homepage sections ('paths./') not found or not an array in JSON.",
+    );
+    return null; // Homepage sections not found
+  } catch (error) {
+    console.error('Error extracting hero image URL:', error);
+    return null;
+  }
+}
+
 export async function POST(req: Request) {
   try {
     // main prompt that generates the complete store JSON representation
@@ -36,6 +71,30 @@ export async function POST(req: Request) {
     const body = await req.json();
     const userPrompt = body.prompt;
     const userId = body.userId;
+
+    // --- Get User Email from Session ---
+    let userEmail: string | null = null;
+    try {
+      const requestHeaders = await headers(); // Await the headers
+      const session = await auth.api.getSession({ headers: requestHeaders });
+      if (session?.user?.email) {
+        userEmail = session.user.email;
+        console.log(
+          `Retrieved email ${userEmail} for user ${userId} from session.`,
+        );
+      } else {
+        console.warn(
+          `Could not retrieve email from session for user ${userId}. Email will be null in generated_stores.`,
+        );
+      }
+    } catch (sessionError: any) {
+      console.error(
+        `Error retrieving session for user ${userId}:`,
+        sessionError,
+      );
+      // Email will remain null
+    }
+    // --- End Get User Email from Session ---
 
     // Directly use the mode from the request body, default to 'stock' if invalid/missing
     const requestedMode = body.imageGenerationMode;
@@ -227,6 +286,50 @@ export async function POST(req: Request) {
           { status: 500 },
         );
       }
+
+      // --- Save to generated_stores table ---
+      const heroImageUrlToSave = extractHeroImageUrl(finalJson);
+
+      if (!heroImageUrlToSave) {
+        console.error(
+          `Hero image URL could not be extracted for store generation (User: ${userId}, Prompt: "${userPrompt.substring(0, 50)}..."). Skipping database entry for generated_stores.`,
+        );
+      } else if (pool) {
+        // Proceed only if heroImageUrlToSave is not null AND pool is available
+        let dbClient: PoolClient | undefined;
+        try {
+          dbClient = await pool.connect();
+          const insertQuery = `
+              INSERT INTO generated_stores (user_id, user_email, prompt_text, store_url, hero_image_url)
+              VALUES ($1, $2, $3, $4, $5);
+            `;
+          await dbClient.query(insertQuery, [
+            userId,
+            userEmail,
+            userPrompt,
+            ynsResult.url,
+            heroImageUrlToSave, // Now guaranteed to be a string
+          ]);
+          console.log(
+            `Successfully saved generated store metadata for user ${userId} (Email: ${userEmail}). URL: ${ynsResult.url}`,
+          );
+        } catch (dbError: any) {
+          // Explicitly type dbError
+          console.error(
+            'Failed to save generated store metadata to database. Store was created on YNS, but will not appear in "My Stores":',
+            dbError,
+          );
+          // Logged error, proceed to return success to user for store generation
+        } finally {
+          dbClient?.release();
+        }
+      } else if (!pool) {
+        // heroImageUrlToSave was valid, but pool is not available
+        console.error(
+          'Database pool not available. Skipping save of generated store metadata.',
+        );
+      }
+      // --- End Save to generated_stores table ---
 
       // Return the YNS store URL, the *final* JSON (with replaced images), and generation times
       return NextResponse.json({
