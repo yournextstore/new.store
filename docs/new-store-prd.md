@@ -941,3 +941,83 @@ This workstream aims to improve the reliability and maintainability of store col
     - [x] Enhance backend logic to read the chosen name, look up the palette, and inject the specific colors.
     - [x] Add named color pallete with vibes like "Eco-friendly, wholesome, appealing to health-conscious consumers".
 
+### 8.7 Showcase of Generated Stores
+
+This workstream introduces features for users to track their generated stores and for the community to discover and interact with stores created on the platform. The initial scope will be minimal, focusing on delivering core user-facing functionality iteratively.
+
+#### 8.7.1 Goals
+-   Allow users to easily find and revisit their previously generated stores, with an option to mark favorites.
+-   Provide a public gallery of generated stores where logged-in users can view and vote on them.
+
+#### 8.7.2 Features
+
+1.  **Personal Store Library ("My Stores"):**
+    *   Core Functionality: A private page for a logged-in user to view a list of stores they have generated. Each store entry will display a preview (hero image), the original prompt, a link to the live store, and the creation timestamp. Users can "star" or "unstar" stores, and filter their list to see only starred items.
+    *   Key Data Points: `user_id`, `prompt_text`, `store_url`, `hero_image_url`, `is_starred`, `created_at`.
+
+2.  **Public Store Showcase ("Explore"):**
+    *   Core Functionality: A public page displaying a gallery of generated stores. Initially, all successfully generated stores are eligible. Each store entry will display a preview (hero image), a link to the live store, and its net vote count. Logged-in users can upvote or downvote each store.
+    *   Key Data Points: `store_url`, `hero_image_url`, `user_id` (for voter), `vote_type`.
+
+#### 8.7.3 Database Schema
+
+1.  **`generated_stores` Table:**
+    *   `id` (UUID, PK)
+    *   `user_id` (TEXT NOT NULL, identifies the creator)
+    *   `prompt_text` (TEXT NOT NULL)
+    *   `store_url` (TEXT NOT NULL, from YNS)
+    *   `hero_image_url` (TEXT, extracted from `finalJson` for preview)
+    *   `is_starred` (BOOLEAN, default `false`, for "My Stores")
+    *   `created_at` (TIMESTAMP WITH TIME ZONE, default `CURRENT_TIMESTAMP`)
+
+2.  **`store_votes` Table:**
+    *   `id` (UUID, PK)
+    *   `store_id` (UUID, FK to `generated_stores.id`)
+    *   `user_id` (TEXT NOT NULL, identifies the voter)
+    *   `vote_type` (TEXT, e.g., 'up' or 'down')
+    *   `created_at` (TIMESTAMP WITH TIME ZONE, default `CURRENT_TIMESTAMP`)
+    *   *Constraint: Unique on (`store_id`, `user_id`)*
+
+#### 8.7.4 API Endpoints
+
+*   **`/api/generate/route.ts` (Modifications):**
+    *   Logic to extract `hero_image_url` from `finalJson`.
+    *   Logic to save new record to `generated_stores` table.
+*   **`GET /api/me/stores`:**
+    *   Fetches stores for the authenticated user.
+*   **`PATCH /api/me/stores/{store_id}/star`:**
+    *   Toggles `is_starred` status for a user's store.
+*   **`GET /api/showcase/stores`:**
+    *   Fetches stores for public showcase (paginated, sorted, with net vote counts).
+*   **`POST /api/showcase/stores/{store_id}/vote`:**
+    *   Records a vote for an authenticated user.
+
+#### 8.7.5 Implementation Plan
+
+**Workstream 1: "My Stores" - Personal Library & Starring**
+*   **Goal:** Allow a user to see a list of their generated stores and star their favorites.
+*   **Tasks:**
+    - [ ] **1.1: Database - Initial Schema & Persistence:**
+        - [ ] Define and create the minimal `generated_stores` table.
+        - [ ] Modify `/api/generate/route.ts` to extract `hero_image_url` and save essential store data to `generated_stores`.
+    - [ ] **1.2: Backend - "My Stores" API Endpoints:**
+        - [ ] Create `GET /api/me/stores`.
+        - [ ] Create `PATCH /api/me/stores/{store_id}/star`.
+    - [ ] **1.3: Frontend - "My Stores" Page:**
+        - [ ] Develop the `/my-stores` page: list user's stores with details, preview, link, and star button. Implement starred filter.
+
+**Workstream 2: "Explore" - Public Showcase & Voting**
+*   **Goal:** Allow users to browse a public feed of generated stores and vote on them.
+*   **Tasks:**
+    - [ ] **2.1: Database - Voting Schema:**
+        - [ ] Define and create the minimal `store_votes` table.
+    - [ ] **2.2: Backend - "Explore" API Endpoints:**
+        - [ ] Create `GET /api/showcase/stores` (fetch all eligible stores, paginated, calculate net votes).
+        - [ ] Create `POST /api/showcase/stores/{store_id}/vote` (record votes for logged-in users).
+    - [ ] **2.3: Frontend - "Explore" Page:**
+        - [ ] Develop the `/explore` page: display gallery of stores with preview, link, vote counts, and voting buttons.
+
+#### 8.7.6 Key Considerations
+-   **Hero Image Extraction:** Backend logic in `/api/generate` needs to reliably parse `finalJson` for a suitable `hero_image_url` (e.g., from `HeroSection.data.image.src` or `HeroSection.data.slides[0].image.src`).
+-   **Voting Scope:** Initially restricted to logged-in users.
+-   **Vote Calculation:** Net votes for the showcase will be calculated on-the-fly by querying/aggregating data from the `store_votes` table.
