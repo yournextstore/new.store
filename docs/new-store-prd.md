@@ -1005,8 +1005,8 @@ This workstream introduces features for users to track their generated stores an
     - [x] **1.2: Backend - "My Stores" API Endpoints:**
         - [x] Create `GET /api/me/stores`.
         - [x] Create `PATCH /api/me/stores/{store_id}/star`.
-    - [ ] **1.3: Frontend - "My Stores" Page:**
-        - [ ] Develop the `/my-stores` page: list user's stores with details, preview, link, and star button. Implement starred filter.
+    - [x] **1.3: Frontend - "My Stores" Page:**
+        - [x] Develop the `/my-stores` page: list user's stores with details, preview, link, and star button. Implement starred filter.
 
 **Workstream 2: "Explore" - Public Showcase & Voting**
 *   **Goal:** Allow users to browse a public feed of generated stores and vote on them.
