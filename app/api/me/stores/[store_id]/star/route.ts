@@ -8,13 +8,10 @@ import type { PoolClient } from 'pg';
 const UUID_REGEX =
   /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
-interface PatchParams {
-  params: {
-    store_id: string;
-  };
-}
-
-export async function PATCH(request: Request, { params }: PatchParams) {
+export async function PATCH(
+  request: Request,
+  context: { params: { store_id: string } },
+) {
   try {
     const requestHeaders = await headers();
     const session = await auth.api.getSession({ headers: requestHeaders });
@@ -23,7 +20,10 @@ export async function PATCH(request: Request, { params }: PatchParams) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     const userId = session.user.id;
-    const { store_id } = params;
+
+    // As per Next.js 15+ docs, await params object before accessing its properties
+    const resolvedParams = await context.params;
+    const store_id = resolvedParams.store_id;
 
     if (!UUID_REGEX.test(store_id)) {
       return NextResponse.json(
