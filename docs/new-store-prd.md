@@ -1016,8 +1016,8 @@ This workstream introduces features for users to track their generated stores an
     - [x] **2.2: Backend - "Explore" API Endpoints:**
         - [x] Create `GET /api/showcase/stores` (fetch all eligible stores, paginated, calculate net votes).
         - [x] Create `POST /api/showcase/stores/{store_id}/vote` (record votes for logged-in users).
-    - [ ] **2.3: Frontend - "Explore" Page:**
-        - [ ] Develop the `/explore` page: display gallery of stores with preview, link, vote counts, and voting buttons.
+    - [x] **2.3: Frontend - "Explore" Page:**
+        - [x] Develop the `/explore` page: display gallery of stores with preview, link, vote counts, and voting buttons.
 
 #### 8.7.6 Key Considerations
 -   **Hero Image Extraction:** Backend logic in `/api/generate` needs to reliably parse `finalJson` for a suitable `hero_image_url` (e.g., from `HeroSection.data.image.src` or `HeroSection.data.slides[0].image.src`).

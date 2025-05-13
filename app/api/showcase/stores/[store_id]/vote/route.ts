@@ -29,7 +29,9 @@ export async function POST(
     const userId = session.user.id;
     const userEmail = session.user.email; // Can be null
 
-    const store_id = context.params.store_id;
+    // Await params as per Next.js 15+ guidance
+    const resolvedParams = await context.params;
+    const store_id = resolvedParams.store_id;
 
     if (!UUID_REGEX.test(store_id)) {
       return NextResponse.json(

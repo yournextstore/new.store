@@ -40,7 +40,7 @@ export async function GET(request: Request) {
         gs.hero_image_url AS "heroImageUrl",
         gs.is_starred AS "isStarred", -- Retaining for potential future use by client, though not primary for showcase
         gs.created_at AS "createdAt",
-        COALESCE(SUM(CASE WHEN sv.vote_type = 'up' THEN 1 WHEN sv.vote_type = 'down' THEN -1 ELSE 0 END), 0) AS "netVotes"
+        COALESCE(SUM(CASE WHEN sv.vote_type = 'up' THEN 1 WHEN sv.vote_type = 'down' THEN -1 ELSE 0 END), 0)::INTEGER AS "netVotes"
       FROM
         generated_stores gs
       LEFT JOIN
