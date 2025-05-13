@@ -1012,7 +1012,7 @@ This workstream introduces features for users to track their generated stores an
 *   **Goal:** Allow users to browse a public feed of generated stores and vote on them.
 *   **Tasks:**
     - [x] **2.1: Database - Voting Schema:**
-        - [ ] Define and create the minimal `store_votes` table.
+        - [x] Define and create the minimal `store_votes` table.
     - [x] **2.2: Backend - "Explore" API Endpoints:**
         - [x] Create `GET /api/showcase/stores` (fetch all eligible stores, paginated, calculate net votes).
         - [x] Create `POST /api/showcase/stores/{store_id}/vote` (record votes for logged-in users).
