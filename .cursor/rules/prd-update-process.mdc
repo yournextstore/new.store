@@ -1,0 +1,38 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Rule: PRD Update Process
+
+This rule outlines best practices for updating or extending the Product Requirements Document ([docs/new-store-prd.md](mdc:docs/new-store-prd.md)). The goal is to ensure PRD changes are clear, well-understood, consistent, and actionable.
+
+## Process for PRD Updates:
+
+1.  **Propose & Discuss First:**
+    *   Before making direct edits for substantial new features or significant changes to existing sections, initiate a discussion.
+    *   Clearly state the intended change, the problem it solves, or the feature it introduces.
+    *   Use this discussion to clarify scope, align understanding, explore alternatives, and identify potential impacts.
+
+2.  **Define Minimal Scope Initially:**
+    *   For new features, focus on defining a minimal scope first.
+    *   Avoid over-specifying details too early. The PRD can be fleshed out iteratively as the feature evolves.
+
+3.  **Maintain Consistency:**
+    *   When adding new sections or sub-sections, refer to the structure, formatting (e.g., heading levels, use of bolding/italics, lists), and level of detail in existing, comparable parts of the PRD.
+    *   For implementation plans, use Markdown task lists (`- [ ] Task description`) as demonstrated in sections like 8.6.3 and 8.7.5 of the current PRD.
+
+4.  **Ground in Reality (Codebase Awareness):**
+    *   If PRD updates affect existing functionality or build upon current systems, briefly consider the existing codebase (e.g., files like [app/api/generate/route.ts](mdc:app/api/generate/route.ts) or [app/chat.tsx](mdc:app/chat.tsx)).
+    *   This helps ensure that PRD proposals are technically feasible and account for the current state of the codebase.
+
+5.  **Iterative Refinement of PRD Edits:**
+    *   Treat PRD edits as an iterative process. An initial proposed edit might be a starting point.
+    *   Be prepared to review and refine the PRD text based on feedback to improve clarity and accuracy.
+
+6.  **Actionable Implementation Plans:**
+    *   For new features or significant changes requiring development effort, ensure the PRD includes a clear implementation plan.
+    *   Break down the plan into actionable tasks or feature-focused workstreams.
+    *   Using Markdown task lists (`- [ ]`) is preferred for these plans.
+
+By following this process, we can keep the PRD a living, useful, and clear document that effectively guides development.
