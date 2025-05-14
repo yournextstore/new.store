@@ -72,189 +72,108 @@ export interface ColorPalette {
   sectionThemes: SectionThemes;
 }
 
-const DEFAULT_PALETTE_COLORS: CoreColors = {
-  background: '#f3f4f6', // Light Gray
-  foreground: '#374151', // Dark Gray
-  primaryAccent: '#3b82f6', // Blue
-  buttonTextForeground: '#ffffff', // White
-  navBackground: '#e5e7eb', // Slightly Darker Gray
-  navForeground: '#374151', // Dark Gray
-  footerBackground: '#374151', // Dark Gray
-  footerForeground: '#f3f4f6', // Light Gray
-};
+export const DEFAULT_PALETTE: ColorPalette = genPallette(
+  'Default',
+  'A versatile and neutral theme with light grey backgrounds, dark grey text, and a classic blue accent for calls to action. Suitable for a wide range of stores needing a clean, professional look.',
+  {
+    background: '#f3f4f6', // Light Gray
+    foreground: '#374151', // Dark Gray
+    primaryAccent: '#3b82f6', // Blue
+    buttonTextForeground: '#ffffff', // White
+    navBackground: '#e5e7eb', // Slightly Darker Gray
+    navForeground: '#374151', // Dark Gray
+    footerBackground: '#374151', // Dark Gray
+    footerForeground: '#f3f4f6', // Light Gray
+  },
+);
 
-const MINIMALIST_WARM_PALETTE_COLORS: CoreColors = {
-  background: '#fdfbf7', // Off-white/Cream
-  foreground: '#5c5855', // Dark Warm Gray
-  primaryAccent: '#c06e52', // Terracotta
-  buttonTextForeground: '#fdfbf7', // Off-white/Cream
-  navBackground: '#fdfbf7', // Off-white/Cream
-  navForeground: '#5c5855', // Dark Warm Gray
-  footerBackground: '#5c5855', // Dark Warm Gray
-  footerForeground: '#fdfbf7', // Off-white/Cream
-};
+export const MINIMALIST_WARM_PALETTE: ColorPalette = genPallette(
+  'MinimalistWarm',
+  'A clean, modern, and airy theme with off-white and cream backgrounds, warm grey text, and a touch of earthy terracotta for highlights. Ideal for designs that feel calm, organic, or subtly sophisticated.',
+  {
+    background: '#fdfbf7', // Off-white/Cream
+    foreground: '#5c5855', // Dark Warm Gray
+    primaryAccent: '#c06e52', // Terracotta
+    buttonTextForeground: '#fdfbf7', // Off-white/Cream
+    navBackground: '#fdfbf7', // Off-white/Cream
+    navForeground: '#5c5855', // Dark Warm Gray
+    footerBackground: '#5c5855', // Dark Warm Gray
+    footerForeground: '#fdfbf7', // Off-white/Cream
+  },
+);
 
-const ECO_FRIENDLY_HEALTH_PALETTE_COLORS: CoreColors = {
-  background: '#f5f5f0', // Very light, slightly warm off-white/pale beige
-  foreground: '#5d5a53', // Deep, earthy brown-gray
-  primaryAccent: '#6b8e23', // Muted, natural green (sage/olive like)
-  buttonTextForeground: '#ffffff', // Clean White for text on green buttons
-  navBackground: '#f0ede5', // Light creamy beige
-  navForeground: '#5d5a53', // Deep, earthy brown-gray (same as main foreground)
-  footerBackground: '#686357', // Richer, earthy brown
-  footerForeground: '#f0ede5', // Lighter text for footer, matching nav background
-};
-
-export const DEFAULT_PALETTE: ColorPalette = {
-  name: 'Default',
-  description:
-    'A versatile and neutral theme with light grey backgrounds, dark grey text, and a classic blue accent for calls to action. Suitable for a wide range of stores needing a clean, professional look.',
-  coreColors: DEFAULT_PALETTE_COLORS,
-  globalPalette: {
-    theme: {
-      background: DEFAULT_PALETTE_COLORS.background,
-      DEFAULT: DEFAULT_PALETTE_COLORS.foreground,
-    },
-    'theme-nav': {
-      background: DEFAULT_PALETTE_COLORS.navBackground,
-      DEFAULT: DEFAULT_PALETTE_COLORS.navForeground,
-    },
-    'theme-button': {
-      background: DEFAULT_PALETTE_COLORS.primaryAccent,
-      DEFAULT: DEFAULT_PALETTE_COLORS.primaryAccent,
-      text: DEFAULT_PALETTE_COLORS.buttonTextForeground,
-    },
-    'theme-footer': {
-      background: DEFAULT_PALETTE_COLORS.footerBackground,
-      DEFAULT: DEFAULT_PALETTE_COLORS.footerForeground,
-    },
-    'theme-primary': { DEFAULT: DEFAULT_PALETTE_COLORS.primaryAccent },
+export const ECO_FRIENDLY_HEALTH_PALETTE: ColorPalette = genPallette(
+  'ecoFriendlyHealth',
+  'A calming and natural theme using earthy tones, soft greens, and off-whites. Perfect for stores emphasizing organic, sustainable, or health-focused products, creating a wholesome and trustworthy feel.',
+  {
+    background: '#f5f5f0', // Very light, slightly warm off-white/pale beige
+    foreground: '#5d5a53', // Deep, earthy brown-gray
+    primaryAccent: '#6b8e23', // Muted, natural green (sage/olive like)
+    buttonTextForeground: '#ffffff', // Clean White for text on green buttons
+    navBackground: '#f0ede5', // Light creamy beige
+    navForeground: '#5d5a53', // Deep, earthy brown-gray (same as main foreground)
+    footerBackground: '#686357', // Richer, earthy brown
+    footerForeground: '#f0ede5', // Lighter text for footer, matching nav background
   },
-  sectionThemes: {
-    HeroSection: {
-      backgroundColor: DEFAULT_PALETTE_COLORS.background,
-      color: DEFAULT_PALETTE_COLORS.foreground,
-      buttonBackgroundColor: DEFAULT_PALETTE_COLORS.primaryAccent,
-      buttonTextColor: DEFAULT_PALETTE_COLORS.buttonTextForeground,
-    },
-    Nav: {
-      backgroundColor: DEFAULT_PALETTE_COLORS.navBackground,
-      color: DEFAULT_PALETTE_COLORS.navForeground,
-    },
-    Footer: {
-      backgroundColor: DEFAULT_PALETTE_COLORS.footerBackground,
-      color: DEFAULT_PALETTE_COLORS.footerForeground,
-    },
-    ProductDetails: {
-      color: DEFAULT_PALETTE_COLORS.foreground,
-      buttonBackgroundColor: DEFAULT_PALETTE_COLORS.primaryAccent,
-      buttonTextColor: DEFAULT_PALETTE_COLORS.buttonTextForeground,
-    },
-  },
-};
-
-export const MINIMALIST_WARM_PALETTE: ColorPalette = {
-  name: 'MinimalistWarm',
-  description:
-    'A clean, modern, and airy theme with off-white and cream backgrounds, warm grey text, and a touch of earthy terracotta for highlights. Ideal for designs that feel calm, organic, or subtly sophisticated.',
-  coreColors: MINIMALIST_WARM_PALETTE_COLORS,
-  globalPalette: {
-    theme: {
-      background: MINIMALIST_WARM_PALETTE_COLORS.background,
-      DEFAULT: MINIMALIST_WARM_PALETTE_COLORS.foreground,
-    },
-    'theme-nav': {
-      background: MINIMALIST_WARM_PALETTE_COLORS.navBackground,
-      DEFAULT: MINIMALIST_WARM_PALETTE_COLORS.navForeground,
-    },
-    'theme-button': {
-      background: MINIMALIST_WARM_PALETTE_COLORS.primaryAccent,
-      DEFAULT: MINIMALIST_WARM_PALETTE_COLORS.primaryAccent,
-      text: MINIMALIST_WARM_PALETTE_COLORS.buttonTextForeground,
-    },
-    'theme-footer': {
-      background: MINIMALIST_WARM_PALETTE_COLORS.footerBackground,
-      DEFAULT: MINIMALIST_WARM_PALETTE_COLORS.footerForeground,
-    },
-    'theme-primary': {
-      DEFAULT: MINIMALIST_WARM_PALETTE_COLORS.primaryAccent,
-    },
-  },
-  sectionThemes: {
-    HeroSection: {
-      backgroundColor: MINIMALIST_WARM_PALETTE_COLORS.background,
-      color: MINIMALIST_WARM_PALETTE_COLORS.foreground,
-      buttonBackgroundColor: MINIMALIST_WARM_PALETTE_COLORS.primaryAccent,
-      buttonTextColor: MINIMALIST_WARM_PALETTE_COLORS.buttonTextForeground,
-    },
-    Nav: {
-      backgroundColor: MINIMALIST_WARM_PALETTE_COLORS.navBackground,
-      color: MINIMALIST_WARM_PALETTE_COLORS.navForeground,
-    },
-    Footer: {
-      backgroundColor: MINIMALIST_WARM_PALETTE_COLORS.footerBackground,
-      color: MINIMALIST_WARM_PALETTE_COLORS.footerForeground,
-    },
-    ProductDetails: {
-      color: MINIMALIST_WARM_PALETTE_COLORS.foreground,
-      buttonBackgroundColor: MINIMALIST_WARM_PALETTE_COLORS.primaryAccent,
-      buttonTextColor: MINIMALIST_WARM_PALETTE_COLORS.buttonTextForeground,
-    },
-  },
-};
-
-export const ECO_FRIENDLY_HEALTH_PALETTE: ColorPalette = {
-  name: 'ecoFriendlyHealth',
-  description:
-    'A calming and natural theme using earthy tones, soft greens, and off-whites. Perfect for stores emphasizing organic, sustainable, or health-focused products, creating a wholesome and trustworthy feel.',
-  coreColors: ECO_FRIENDLY_HEALTH_PALETTE_COLORS,
-  globalPalette: {
-    theme: {
-      background: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.background,
-      DEFAULT: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.foreground,
-    },
-    'theme-nav': {
-      background: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.navBackground,
-      DEFAULT: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.navForeground,
-    },
-    'theme-button': {
-      background: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.primaryAccent,
-      DEFAULT: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.primaryAccent,
-      text: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.buttonTextForeground,
-    },
-    'theme-footer': {
-      background: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.footerBackground,
-      DEFAULT: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.footerForeground,
-    },
-    'theme-primary': {
-      DEFAULT: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.primaryAccent,
-    },
-  },
-  sectionThemes: {
-    HeroSection: {
-      backgroundColor: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.background,
-      color: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.foreground,
-      buttonBackgroundColor: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.primaryAccent,
-      buttonTextColor: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.buttonTextForeground,
-    },
-    Nav: {
-      backgroundColor: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.navBackground,
-      color: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.navForeground,
-    },
-    Footer: {
-      backgroundColor: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.footerBackground,
-      color: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.footerForeground,
-    },
-    ProductDetails: {
-      color: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.foreground,
-      buttonBackgroundColor: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.primaryAccent,
-      buttonTextColor: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.buttonTextForeground,
-    },
-  },
-};
+);
 
 export const AVAILABLE_PALETTES: Record<string, ColorPalette> = {
   [DEFAULT_PALETTE.name]: DEFAULT_PALETTE,
   [MINIMALIST_WARM_PALETTE.name]: MINIMALIST_WARM_PALETTE,
   [ECO_FRIENDLY_HEALTH_PALETTE.name]: ECO_FRIENDLY_HEALTH_PALETTE,
 };
+
+function genPallette(
+  name: string,
+  description: string,
+  coreColors: CoreColors,
+) {
+  return {
+    name,
+    description,
+    coreColors: coreColors,
+    globalPalette: {
+      theme: {
+        background: coreColors.background,
+        DEFAULT: coreColors.foreground,
+      },
+      'theme-nav': {
+        background: coreColors.navBackground,
+        DEFAULT: coreColors.navForeground,
+      },
+      'theme-button': {
+        background: coreColors.primaryAccent,
+        DEFAULT: coreColors.primaryAccent,
+        text: coreColors.buttonTextForeground,
+      },
+      'theme-footer': {
+        background: coreColors.footerBackground,
+        DEFAULT: coreColors.footerForeground,
+      },
+      'theme-primary': {
+        DEFAULT: coreColors.primaryAccent,
+      },
+    },
+    sectionThemes: {
+      HeroSection: {
+        backgroundColor: coreColors.background,
+        color: coreColors.foreground,
+        buttonBackgroundColor: coreColors.primaryAccent,
+        buttonTextColor: coreColors.buttonTextForeground,
+      },
+      Nav: {
+        backgroundColor: coreColors.navBackground,
+        color: coreColors.navForeground,
+      },
+      Footer: {
+        backgroundColor: coreColors.footerBackground,
+        color: coreColors.footerForeground,
+      },
+      ProductDetails: {
+        color: coreColors.foreground,
+        buttonBackgroundColor: coreColors.primaryAccent,
+        buttonTextColor: coreColors.buttonTextForeground,
+      },
+    },
+  };
+}
