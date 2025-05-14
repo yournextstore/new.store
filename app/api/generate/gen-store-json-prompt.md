@@ -237,6 +237,18 @@ Below are the section types supported by the Your Next Store platform, along wit
       - `"Default"`: "A versatile and neutral theme with light grey backgrounds, dark grey text, and a classic blue accent for calls to action. Suitable for a wide range of stores needing a clean, professional look."
       - `"MinimalistWarm"`: "A clean, modern, and airy theme with off-white and cream backgrounds, warm grey text, and a touch of earthy terracotta for highlights. Ideal for designs that feel calm, organic, or subtly sophisticated."
       - `"ecoFriendlyHealth"`: "A calming and natural theme using earthy tones, soft greens, and off-whites. Perfect for stores emphasizing organic, sustainable, or health-focused products, creating a wholesome and trustworthy feel."
+      - `"LinenOlive"`: "A grounded and earthy theme with soft linen backgrounds, deep grey text, and a natural olive green accent. Great for artisanal or eco-conscious brands that want to feel rustic yet refined."
+      - `"PorcelainCoral"`: "A fresh and delicate theme with porcelain white backgrounds, navy-toned text, and soft coral accents. Ideal for wellness, beauty, or boutique brands looking for elegance with a gentle pop."
+      - `"CloudSky"`: "A crisp and breathable theme with sky-blue accents, soft navy text, and cool white tones. Perfect for modern digital stores that want to feel lightweight, clean, and tech-savvy."
+      - `"EggshellAmber"`: "A warm and inviting palette featuring creamy backgrounds, rich brown text, and golden amber highlights. Great for cozy lifestyle stores or heritage-inspired brands."
+      - `"IvoryRose"`: "A romantic and gentle palette with blush undertones, ivory backdrops, and rose-pink accents. Ideal for fashion, personal care, or creator stores with a soft, emotional tone."
+      - `"WhiteLime"`: "A bold and bright theme with crisp white backgrounds, charcoal text, and vibrant lime green for standout CTAs. Great for energetic brands, Gen Z products, or sustainability-focused items."
+      - `"ParchmentCyan"`: "A clean and professional theme with parchment-like backgrounds, charcoal text, and a bright cyan pop. Fits well with tech, education, or service-oriented shops."
+      - `"SnowViolet"`: "A minimalist and expressive theme with white-on-white layers, cool violet buttons, and deep grey text. Great for art, design-forward brands, or modern personal portfolios."
+      - `"CharcoalMint"`: "A sleek dark mode palette with charcoal backdrops, mint green CTAs, and bright text for contrast. Ideal for modern wellness, SaaS, or premium night-mode experiences."
+      - `"ObsidianSky"`: "A techy dark theme with obsidian black bases, cool blue buttons, and light steel text. Perfect for software, developer tools, or edgy fashion brands."
+      - `"GraphiteLemon"`: "A bold and punchy dark mode with graphite greys, clean yellow highlights, and a strong contrast ratio. Great for DTC or creator brands looking for energy in a dark aesthetic."
+      - `"SlatePeach"`: "A cozy dark palette with desaturated navy tones, soft peach accents, and airy text. Ideal for indie brands, lifestyle products, or any store that wants to feel warm yet modern."
 - **Hardcoded Values**:
   - Use hardcoded values for `"logo"` and `"ogimage"` as specified:
     - `"logo"`: { "width": 1024, "height": 1024, "imageUrl": "https://yns.app/icon.png" }
@@ -283,7 +295,7 @@ A minimalist, low-top casual sneaker displayed in perfect profile against a plai
 ```
 
 **URL Encoding:**
-The generated description **must** be URL-encoded before being included in the placeholder URL. This means replacing spaces with `%20`, and encoding other special characters (e.g., `,` becomes `%2C`, `&` becomes `%26`, `?` becomes `%3F`). Most programming environments have standard functions for this. Ensure your output description is properly encoded.  
+The generated description **must** be URL-encoded before being included in the placeholder URL. This means replacing spaces with `%20`, and encoding other special characters (e.g., `,` becomes `%2C`, `&` becomes `%26`, `?` becomes `%3F`). Most programming environments have standard functions for this. Ensure your output description is properly encoded.
 **Example (Encoded):**
 `https://yns.img?description=A%20minimalist%2C%20low-top%20casual%20sneaker%20displayed%20in%20perfect%20profile%20against%20a%20plain%2C%20light%20gray%20or%20off-white%20studio%20background.%20The%20shoe%20is%20lavender%20in%20color%20with%20a%20smooth%2C%20tightly%20woven%20knit%20textile%20upper%20and%20a%20matte%20finish.%20It%20has%20a%20clean%2C%20seamless%20silhouette%20with%20no%20logos%20or%20decorative%20elements%2C%20emphasizing%20simplicity%20and%20modern%20design.%20The%20sneaker%20features%20black%20metal%20eyelets%20and%20matching%20lavender-colored%20laces%2C%20with%20a%20soft%2C%20slightly%20padded%20tongue%20integrated%20smoothly%20into%20the%20upper.%20The%20sole%20is%20thick%2C%20rounded%2C%20and%20made%20from%20smooth%20white%20rubber%20or%20EVA%2C%20curving%20gently%20at%20the%20toe%20and%20heel%20for%20a%20contemporary%2C%20ergonomic%20look.%20The%20shoe%20is%20the%20only%20object%20in%20the%20frame%2C%20centered%20horizontally%2C%20with%20soft%2C%20diffused%20lighting%20that%20casts%20a%20gentle%20shadow%20beneath%20it.%20The%20visual%20style%20is%20clean%2C%20calm%2C%20and%20modern%20%E2%80%94%20ideal%20for%20premium%20ecommerce%20display.`
 
