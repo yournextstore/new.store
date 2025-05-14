@@ -1,25 +1,15 @@
 'use client';
 
 import { useState, useEffect, useTransition } from 'react';
-import { Star, ExternalLink, Search, Loader2 } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
+import { Search, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import Image from 'next/image';
 import Link from 'next/link';
-import { toggleStarAction } from './actions'; // Import the server action
-
-interface Store {
-  id: string;
-  prompt_text: string;
-  store_url: string;
-  hero_image_url: string | null;
-  is_starred: boolean;
-  created_at: string;
-}
+import StoreGrid from './store-grid';
+import { toggleStarAction } from './actions';
+import type { Store } from './types';
 
 interface MyStoresClientProps {
   initialStores: Store[];
@@ -31,23 +21,25 @@ export default function MyStoresClient({
   initialFetchError,
 }: MyStoresClientProps) {
   const [stores, setStores] = useState<Store[]>(initialStores);
-  const [filteredStores, setFilteredStores] = useState<Store[]>([]);
+  const [filteredStores, setFilteredStores] = useState<Store[]>(initialStores);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeTab, setActiveTab] = useState('all');
+  const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(
     initialFetchError,
   );
-  const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState('all');
-  const { toast } = useToast();
   const [isTogglingStar, startToggleStarTransition] = useTransition();
 
   useEffect(() => {
     if (!initialFetchError) {
       setStores(initialStores);
+      setFilteredStores(initialStores);
     } else {
       setStores([]);
       setFilteredStores([]);
     }
+    setFetchError(initialFetchError);
   }, [initialStores, initialFetchError]);
 
   useEffect(() => {
@@ -56,7 +48,6 @@ export default function MyStoresClient({
 
   const handleToggleStar = async (storeId: string) => {
     const originalStores = [...stores];
-    // Optimistic update
     setStores((prevStores) =>
       prevStores.map((store) =>
         store.id === storeId
@@ -73,15 +64,11 @@ export default function MyStoresClient({
           throw new Error(result.error || 'Failed to update star status');
         }
 
-        // Server action returns { id, is_starred } on success
-        // The optimistic update usually handles the visual change immediately.
-        // revalidatePath in the server action ensures data consistency.
-        // If we want to be absolutely sure the client state matches the db after the action:
         if (result.id && typeof result.is_starred === 'boolean') {
           const updatedIsStarred = result.is_starred;
           setStores((prevStores) =>
             prevStores.map((store) =>
-              store.id === result.id // Use result.id to be precise
+              store.id === result.id
                 ? { ...store, is_starred: updatedIsStarred }
                 : store,
             ),
@@ -90,11 +77,9 @@ export default function MyStoresClient({
 
         toast({
           title: 'Success',
-          // Use result.is_starred for the toast message if available, otherwise rely on optimistic update view
-          description: `Store ${typeof result.is_starred === 'boolean' ? (result.is_starred ? 'starred' : 'unstarred') : 'status updated'} successfully.`,
+          description: `Store ${result.is_starred ? 'starred' : 'unstarred'} successfully.`,
         });
       } catch (error: any) {
-        // Revert optimistic update on error
         setStores(originalStores);
         toast({
           title: 'Error',
@@ -106,22 +91,24 @@ export default function MyStoresClient({
   };
 
   const filterStores = () => {
-    let currentStores = [...stores];
+    let filtered = [...stores];
 
+    // Filter by search query
     if (searchQuery) {
-      currentStores = currentStores.filter((store) =>
+      filtered = filtered.filter((store) =>
         store.prompt_text.toLowerCase().includes(searchQuery.toLowerCase()),
       );
     }
 
+    // Filter by tab
     if (activeTab === 'starred') {
-      currentStores = currentStores.filter((store) => store.is_starred);
+      filtered = filtered.filter((store) => store.is_starred);
     }
 
-    setFilteredStores(currentStores);
+    setFilteredStores(filtered);
   };
 
-  if (isLoading) {
+  if (isLoading && !initialFetchError) {
     return (
       <div className="flex justify-center items-center py-20">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -151,7 +138,6 @@ export default function MyStoresClient({
             className="pl-8"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            disabled={isLoading || !!fetchError}
           />
         </div>
         <Tabs
@@ -160,12 +146,8 @@ export default function MyStoresClient({
           onValueChange={setActiveTab}
         >
           <TabsList>
-            <TabsTrigger value="all" disabled={isLoading || !!fetchError}>
-              All Stores
-            </TabsTrigger>
-            <TabsTrigger value="starred" disabled={isLoading || !!fetchError}>
-              Starred
-            </TabsTrigger>
+            <TabsTrigger value="all">All Stores</TabsTrigger>
+            <TabsTrigger value="starred">Starred</TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
@@ -177,68 +159,20 @@ export default function MyStoresClient({
               ? 'No stores match your search query.'
               : activeTab === 'starred'
                 ? "You haven't starred any stores yet."
-                : stores.length === 0
-                  ? "You haven't generated any stores yet. Get started!"
-                  : 'No stores in this view.'}
+                : "You haven't generated any stores yet."}
           </p>
-          {!searchQuery && activeTab !== 'starred' && stores.length === 0 && (
+          {!searchQuery && activeTab !== 'starred' && (
             <Button asChild className="mt-4">
-              <Link href="/">Generate Your First Store</Link>
+              <Link href="/generate">Generate Your First Store</Link>
             </Button>
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredStores.map((store) => (
-            <Card key={store.id} className="overflow-hidden flex flex-col">
-              <div className="relative aspect-video">
-                <Image
-                  src={store.hero_image_url || '/placeholder.svg'}
-                  alt={`Preview of store: ${store.prompt_text}`}
-                  fill
-                  className="object-cover"
-                  unoptimized={store.hero_image_url?.includes(
-                    'placeholder.svg',
-                  )}
-                />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="absolute top-2 right-2 bg-background/80 hover:bg-background/90"
-                  onClick={() => handleToggleStar(store.id)}
-                  aria-label={store.is_starred ? 'Unstar store' : 'Star store'}
-                  disabled={isTogglingStar}
-                >
-                  <Star
-                    className={`h-5 w-5 ${store.is_starred ? 'fill-yellow-400 text-yellow-400' : 'text-muted-foreground'}`}
-                  />
-                </Button>
-              </div>
-              <CardContent className="flex-grow pt-6">
-                <p className="text-sm text-muted-foreground mb-2">
-                  Created{' '}
-                  {formatDistanceToNow(new Date(store.created_at), {
-                    addSuffix: true,
-                  })}
-                </p>
-                <p className="line-clamp-3 text-sm">{store.prompt_text}</p>
-              </CardContent>
-              <CardFooter className="pt-2 pb-4">
-                <Button asChild variant="outline" className="w-full">
-                  <Link
-                    href={store.store_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2"
-                  >
-                    <ExternalLink className="h-4 w-4" />
-                    Visit Store
-                  </Link>
-                </Button>
-              </CardFooter>
-            </Card>
-          ))}
-        </div>
+        <StoreGrid
+          storesToDisplay={filteredStores}
+          onToggleStar={handleToggleStar}
+          isTogglingStar={isTogglingStar}
+        />
       )}
     </div>
   );
