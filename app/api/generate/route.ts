@@ -301,9 +301,9 @@ export async function POST(req: Request) {
           dbClient = await pool.connect();
           const insertQuery = `
               INSERT INTO generated_stores (user_id, user_email, prompt_text, store_url, hero_image_url, final_store_json)
-              VALUES ($1, $2, $3, $4, $5, $6);
+              VALUES ($1, $2, $3, $4, $5, $6) RETURNING id;
             `;
-          await dbClient.query(insertQuery, [
+          const result = await dbClient.query(insertQuery, [
             userId,
             userEmail,
             userPrompt,
@@ -311,8 +311,9 @@ export async function POST(req: Request) {
             heroImageUrlToSave, // Now guaranteed to be a string
             JSON.stringify(finalJson),
           ]);
+          const newEntryId = result.rows[0]?.id;
           console.log(
-            `Successfully saved generated store metadata for user ${userId} (Email: ${userEmail}). URL: ${ynsResult.url}`,
+            `Successfully saved generated store metadata for user ${userId} (Email: ${userEmail}). URL: ${ynsResult.url}. DB Entry ID: ${newEntryId}`,
           );
         } catch (dbError: any) {
           // Explicitly type dbError
