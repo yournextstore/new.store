@@ -118,7 +118,7 @@ export const ECO_FRIENDLY_HEALTH_PALETTE: ColorPalette = genPallette(
 );
 
 const LINEN_OLIVE_COLORS_PALLETE: ColorPalette = genPallette(
-  'LINEN_OLIVE_COLORS',
+  'LinenOlive',
   'A grounded and earthy theme with soft linen backgrounds, deep grey text, and a natural olive green accent. Great for artisanal or eco-conscious brands that want to feel rustic yet refined.',
   {
     background: '#FFFBF0',
@@ -133,7 +133,7 @@ const LINEN_OLIVE_COLORS_PALLETE: ColorPalette = genPallette(
 );
 
 const PORCELAIN_CORAL_COLORS_PALLETE: ColorPalette = genPallette(
-  'PORCELAIN_CORAL_COLORS',
+  'PorcelainCoral',
   'A fresh and delicate theme with porcelain white backgrounds, navy-toned text, and soft coral accents. Ideal for wellness, beauty, or boutique brands looking for elegance with a gentle pop.',
   {
     background: '#F9FAFB',
@@ -148,7 +148,7 @@ const PORCELAIN_CORAL_COLORS_PALLETE: ColorPalette = genPallette(
 );
 
 const CLOUD_SKY_COLORS_PALLETE: ColorPalette = genPallette(
-  'CLOUD_SKY_COLORS',
+  'CloudSky',
   'A crisp and breathable theme with sky-blue accents, soft navy text, and cool white tones. Perfect for modern digital stores that want to feel lightweight, clean, and tech-savvy.',
   {
     background: '#F8FAFC',
@@ -163,7 +163,7 @@ const CLOUD_SKY_COLORS_PALLETE: ColorPalette = genPallette(
 );
 
 const EGGSHELL_AMBER_COLORS_PALLETE: ColorPalette = genPallette(
-  'EGGSHELL_AMBER_COLORS',
+  'EggshellAmber',
   'A warm and inviting palette featuring creamy backgrounds, rich brown text, and golden amber highlights. Great for cozy lifestyle stores or heritage-inspired brands.',
   {
     background: '#FFFBEB',
@@ -178,7 +178,7 @@ const EGGSHELL_AMBER_COLORS_PALLETE: ColorPalette = genPallette(
 );
 
 const IVORY_ROSE_COLORS_PALLETE: ColorPalette = genPallette(
-  'IVORY_ROSE_COLORS',
+  'IvoryRose',
   'A romantic and gentle palette with blush undertones, ivory backdrops, and rose-pink accents. Ideal for fashion, personal care, or creator stores with a soft, emotional tone.',
   {
     background: '#FFFAF5',
@@ -193,7 +193,7 @@ const IVORY_ROSE_COLORS_PALLETE: ColorPalette = genPallette(
 );
 
 const WHITE_LIME_COLORS_PALLETE: ColorPalette = genPallette(
-  'WHITE_LIME_COLORS',
+  'WhiteLime',
   'A bold and bright theme with crisp white backgrounds, charcoal text, and vibrant lime green for standout CTAs. Great for energetic brands, Gen Z products, or sustainability-focused items.',
   {
     background: '#FFFFFF',
@@ -208,7 +208,7 @@ const WHITE_LIME_COLORS_PALLETE: ColorPalette = genPallette(
 );
 
 const PARCHMENT_CYAN_COLORS_PALLETE: ColorPalette = genPallette(
-  'PARCHMENT_CYAN_COLORS',
+  'ParchmentCyan',
   'A clean and professional theme with parchment-like backgrounds, charcoal text, and a bright cyan pop. Fits well with tech, education, or service-oriented shops.',
   {
     background: '#FDFCFB',
@@ -223,7 +223,7 @@ const PARCHMENT_CYAN_COLORS_PALLETE: ColorPalette = genPallette(
 );
 
 const SNOW_VIOLET_COLORS_PALLETE: ColorPalette = genPallette(
-  'SNOW_VIOLET_COLORS',
+  'SnowViolet',
   'A minimalist and expressive theme with white-on-white layers, cool violet buttons, and deep grey text. Great for art, design-forward brands, or modern personal portfolios.',
   {
     background: '#FDFDFD',
@@ -238,7 +238,7 @@ const SNOW_VIOLET_COLORS_PALLETE: ColorPalette = genPallette(
 );
 
 const CHARCOAL_MINT_COLORS_PALLETE: ColorPalette = genPallette(
-  'CHARCOAL_MINT_COLORS',
+  'CharcoalMint',
   'A sleek dark mode palette with charcoal backdrops, mint green CTAs, and bright text for contrast. Ideal for modern wellness, SaaS, or premium night-mode experiences.',
   {
     background: '#1F1F1F',
@@ -253,7 +253,7 @@ const CHARCOAL_MINT_COLORS_PALLETE: ColorPalette = genPallette(
 );
 
 const OBSIDIAN_SKY_COLORS_PALLETE: ColorPalette = genPallette(
-  'OBSIDIAN_SKY_COLORS',
+  'ObsidianSky',
   'A techy dark theme with obsidian black bases, cool blue buttons, and light steel text. Perfect for software, developer tools, or edgy fashion brands.',
   {
     background: '#0B0C10',
@@ -268,7 +268,7 @@ const OBSIDIAN_SKY_COLORS_PALLETE: ColorPalette = genPallette(
 );
 
 const GRAPHITE_LEMON_COLORS_PALLETE: ColorPalette = genPallette(
-  'GRAPHITE_LEMON_COLORS',
+  'GraphiteLemon',
   'A bold and punchy dark mode with graphite greys, clean yellow highlights, and a strong contrast ratio. Great for DTC or creator brands looking for energy in a dark aesthetic.',
   {
     background: '#1C1C1C',
@@ -283,7 +283,7 @@ const GRAPHITE_LEMON_COLORS_PALLETE: ColorPalette = genPallette(
 );
 
 const SLATE_PEACH_COLORS_PALLETE: ColorPalette = genPallette(
-  'SLATE_PEACH_COLORS',
+  'SlatePeach',
   'A cozy dark palette with desaturated navy tones, soft peach accents, and airy text. Ideal for indie brands, lifestyle products, or any store that wants to feel warm yet modern.',
   {
     background: '#1E293B',
