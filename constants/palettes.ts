@@ -30,14 +30,14 @@
 //      `app/api/generate/gen-store-json-prompt.md` so the AI knows it can select it.
 
 export interface CoreColors {
-  background: { oklch: string; hex: string };
-  foreground: { oklch: string; hex: string };
-  primaryAccent: { oklch: string; hex: string };
-  buttonTextForeground: { oklch: string; hex: string };
-  navBackground: { oklch: string; hex: string };
-  navForeground: { oklch: string; hex: string };
-  footerBackground: { oklch: string; hex: string };
-  footerForeground: { oklch: string; hex: string };
+  background: string;
+  foreground: string;
+  primaryAccent: string;
+  buttonTextForeground: string;
+  navBackground: string;
+  navForeground: string;
+  footerBackground: string;
+  footerForeground: string;
 }
 
 export interface GlobalPalette {
@@ -73,36 +73,36 @@ export interface ColorPalette {
 }
 
 const DEFAULT_PALETTE_COLORS: CoreColors = {
-  background: { oklch: '95% 0 0', hex: '#f3f4f6' }, // Light Gray
-  foreground: { oklch: '20% 0 0', hex: '#374151' }, // Dark Gray
-  primaryAccent: { oklch: '55% 0.15 250', hex: '#3b82f6' }, // Blue
-  buttonTextForeground: { oklch: '100% 0 0', hex: '#ffffff' }, // White
-  navBackground: { oklch: '90% 0 0', hex: '#e5e7eb' }, // Slightly Darker Gray
-  navForeground: { oklch: '20% 0 0', hex: '#374151' }, // Dark Gray
-  footerBackground: { oklch: '20% 0 0', hex: '#374151' }, // Dark Gray
-  footerForeground: { oklch: '95% 0 0', hex: '#f3f4f6' }, // Light Gray
+  background: '#f3f4f6', // Light Gray
+  foreground: '#374151', // Dark Gray
+  primaryAccent: '#3b82f6', // Blue
+  buttonTextForeground: '#ffffff', // White
+  navBackground: '#e5e7eb', // Slightly Darker Gray
+  navForeground: '#374151', // Dark Gray
+  footerBackground: '#374151', // Dark Gray
+  footerForeground: '#f3f4f6', // Light Gray
 };
 
 const MINIMALIST_WARM_PALETTE_COLORS: CoreColors = {
-  background: { oklch: '98% 0.01 90', hex: '#fdfbf7' }, // Off-white/Cream
-  foreground: { oklch: '30% 0.02 70', hex: '#5c5855' }, // Dark Warm Gray
-  primaryAccent: { oklch: '60% 0.1 40', hex: '#c06e52' }, // Terracotta
-  buttonTextForeground: { oklch: '98% 0.01 90', hex: '#fdfbf7' }, // Off-white/Cream
-  navBackground: { oklch: '98% 0.01 90', hex: '#fdfbf7' }, // Off-white/Cream
-  navForeground: { oklch: '30% 0.02 70', hex: '#5c5855' }, // Dark Warm Gray
-  footerBackground: { oklch: '30% 0.02 70', hex: '#5c5855' }, // Dark Warm Gray
-  footerForeground: { oklch: '98% 0.01 90', hex: '#fdfbf7' }, // Off-white/Cream
+  background: '#fdfbf7', // Off-white/Cream
+  foreground: '#5c5855', // Dark Warm Gray
+  primaryAccent: '#c06e52', // Terracotta
+  buttonTextForeground: '#fdfbf7', // Off-white/Cream
+  navBackground: '#fdfbf7', // Off-white/Cream
+  navForeground: '#5c5855', // Dark Warm Gray
+  footerBackground: '#5c5855', // Dark Warm Gray
+  footerForeground: '#fdfbf7', // Off-white/Cream
 };
 
 const ECO_FRIENDLY_HEALTH_PALETTE_COLORS: CoreColors = {
-  background: { oklch: '96% 0.01 110', hex: '#f5f5f0' }, // Very light, slightly warm off-white/pale beige
-  foreground: { oklch: '35% 0.03 100', hex: '#5d5a53' }, // Deep, earthy brown-gray
-  primaryAccent: { oklch: '55% 0.12 145', hex: '#6b8e23' }, // Muted, natural green (sage/olive like)
-  buttonTextForeground: { oklch: '100% 0 0', hex: '#ffffff' }, // Clean White for text on green buttons
-  navBackground: { oklch: '92% 0.015 105', hex: '#f0ede5' }, // Light creamy beige
-  navForeground: { oklch: '35% 0.03 100', hex: '#5d5a53' }, // Deep, earthy brown-gray (same as main foreground)
-  footerBackground: { oklch: '40% 0.03 100', hex: '#686357' }, // Richer, earthy brown
-  footerForeground: { oklch: '92% 0.015 105', hex: '#f0ede5' }, // Lighter text for footer, matching nav background
+  background: '#f5f5f0', // Very light, slightly warm off-white/pale beige
+  foreground: '#5d5a53', // Deep, earthy brown-gray
+  primaryAccent: '#6b8e23', // Muted, natural green (sage/olive like)
+  buttonTextForeground: '#ffffff', // Clean White for text on green buttons
+  navBackground: '#f0ede5', // Light creamy beige
+  navForeground: '#5d5a53', // Deep, earthy brown-gray (same as main foreground)
+  footerBackground: '#686357', // Richer, earthy brown
+  footerForeground: '#f0ede5', // Lighter text for footer, matching nav background
 };
 
 export const DEFAULT_PALETTE: ColorPalette = {
@@ -112,43 +112,43 @@ export const DEFAULT_PALETTE: ColorPalette = {
   coreColors: DEFAULT_PALETTE_COLORS,
   globalPalette: {
     theme: {
-      background: DEFAULT_PALETTE_COLORS.background.oklch,
-      DEFAULT: DEFAULT_PALETTE_COLORS.foreground.oklch,
+      background: DEFAULT_PALETTE_COLORS.background,
+      DEFAULT: DEFAULT_PALETTE_COLORS.foreground,
     },
     'theme-nav': {
-      background: DEFAULT_PALETTE_COLORS.navBackground.oklch,
-      DEFAULT: DEFAULT_PALETTE_COLORS.navForeground.oklch,
+      background: DEFAULT_PALETTE_COLORS.navBackground,
+      DEFAULT: DEFAULT_PALETTE_COLORS.navForeground,
     },
     'theme-button': {
-      background: DEFAULT_PALETTE_COLORS.primaryAccent.oklch,
-      DEFAULT: DEFAULT_PALETTE_COLORS.primaryAccent.oklch,
-      text: DEFAULT_PALETTE_COLORS.buttonTextForeground.oklch,
+      background: DEFAULT_PALETTE_COLORS.primaryAccent,
+      DEFAULT: DEFAULT_PALETTE_COLORS.primaryAccent,
+      text: DEFAULT_PALETTE_COLORS.buttonTextForeground,
     },
     'theme-footer': {
-      background: DEFAULT_PALETTE_COLORS.footerBackground.oklch,
-      DEFAULT: DEFAULT_PALETTE_COLORS.footerForeground.oklch,
+      background: DEFAULT_PALETTE_COLORS.footerBackground,
+      DEFAULT: DEFAULT_PALETTE_COLORS.footerForeground,
     },
-    'theme-primary': { DEFAULT: DEFAULT_PALETTE_COLORS.primaryAccent.oklch },
+    'theme-primary': { DEFAULT: DEFAULT_PALETTE_COLORS.primaryAccent },
   },
   sectionThemes: {
     HeroSection: {
-      backgroundColor: DEFAULT_PALETTE_COLORS.background.hex,
-      color: DEFAULT_PALETTE_COLORS.foreground.hex,
-      buttonBackgroundColor: DEFAULT_PALETTE_COLORS.primaryAccent.hex,
-      buttonTextColor: DEFAULT_PALETTE_COLORS.buttonTextForeground.hex,
+      backgroundColor: DEFAULT_PALETTE_COLORS.background,
+      color: DEFAULT_PALETTE_COLORS.foreground,
+      buttonBackgroundColor: DEFAULT_PALETTE_COLORS.primaryAccent,
+      buttonTextColor: DEFAULT_PALETTE_COLORS.buttonTextForeground,
     },
     Nav: {
-      backgroundColor: DEFAULT_PALETTE_COLORS.navBackground.hex,
-      color: DEFAULT_PALETTE_COLORS.navForeground.hex,
+      backgroundColor: DEFAULT_PALETTE_COLORS.navBackground,
+      color: DEFAULT_PALETTE_COLORS.navForeground,
     },
     Footer: {
-      backgroundColor: DEFAULT_PALETTE_COLORS.footerBackground.hex,
-      color: DEFAULT_PALETTE_COLORS.footerForeground.hex,
+      backgroundColor: DEFAULT_PALETTE_COLORS.footerBackground,
+      color: DEFAULT_PALETTE_COLORS.footerForeground,
     },
     ProductDetails: {
-      color: DEFAULT_PALETTE_COLORS.foreground.hex,
-      buttonBackgroundColor: DEFAULT_PALETTE_COLORS.primaryAccent.hex,
-      buttonTextColor: DEFAULT_PALETTE_COLORS.buttonTextForeground.hex,
+      color: DEFAULT_PALETTE_COLORS.foreground,
+      buttonBackgroundColor: DEFAULT_PALETTE_COLORS.primaryAccent,
+      buttonTextColor: DEFAULT_PALETTE_COLORS.buttonTextForeground,
     },
   },
 };
@@ -160,45 +160,45 @@ export const MINIMALIST_WARM_PALETTE: ColorPalette = {
   coreColors: MINIMALIST_WARM_PALETTE_COLORS,
   globalPalette: {
     theme: {
-      background: MINIMALIST_WARM_PALETTE_COLORS.background.oklch,
-      DEFAULT: MINIMALIST_WARM_PALETTE_COLORS.foreground.oklch,
+      background: MINIMALIST_WARM_PALETTE_COLORS.background,
+      DEFAULT: MINIMALIST_WARM_PALETTE_COLORS.foreground,
     },
     'theme-nav': {
-      background: MINIMALIST_WARM_PALETTE_COLORS.navBackground.oklch,
-      DEFAULT: MINIMALIST_WARM_PALETTE_COLORS.navForeground.oklch,
+      background: MINIMALIST_WARM_PALETTE_COLORS.navBackground,
+      DEFAULT: MINIMALIST_WARM_PALETTE_COLORS.navForeground,
     },
     'theme-button': {
-      background: MINIMALIST_WARM_PALETTE_COLORS.primaryAccent.oklch,
-      DEFAULT: MINIMALIST_WARM_PALETTE_COLORS.primaryAccent.oklch,
-      text: MINIMALIST_WARM_PALETTE_COLORS.buttonTextForeground.oklch,
+      background: MINIMALIST_WARM_PALETTE_COLORS.primaryAccent,
+      DEFAULT: MINIMALIST_WARM_PALETTE_COLORS.primaryAccent,
+      text: MINIMALIST_WARM_PALETTE_COLORS.buttonTextForeground,
     },
     'theme-footer': {
-      background: MINIMALIST_WARM_PALETTE_COLORS.footerBackground.oklch,
-      DEFAULT: MINIMALIST_WARM_PALETTE_COLORS.footerForeground.oklch,
+      background: MINIMALIST_WARM_PALETTE_COLORS.footerBackground,
+      DEFAULT: MINIMALIST_WARM_PALETTE_COLORS.footerForeground,
     },
     'theme-primary': {
-      DEFAULT: MINIMALIST_WARM_PALETTE_COLORS.primaryAccent.oklch,
+      DEFAULT: MINIMALIST_WARM_PALETTE_COLORS.primaryAccent,
     },
   },
   sectionThemes: {
     HeroSection: {
-      backgroundColor: MINIMALIST_WARM_PALETTE_COLORS.background.hex,
-      color: MINIMALIST_WARM_PALETTE_COLORS.foreground.hex,
-      buttonBackgroundColor: MINIMALIST_WARM_PALETTE_COLORS.primaryAccent.hex,
-      buttonTextColor: MINIMALIST_WARM_PALETTE_COLORS.buttonTextForeground.hex,
+      backgroundColor: MINIMALIST_WARM_PALETTE_COLORS.background,
+      color: MINIMALIST_WARM_PALETTE_COLORS.foreground,
+      buttonBackgroundColor: MINIMALIST_WARM_PALETTE_COLORS.primaryAccent,
+      buttonTextColor: MINIMALIST_WARM_PALETTE_COLORS.buttonTextForeground,
     },
     Nav: {
-      backgroundColor: MINIMALIST_WARM_PALETTE_COLORS.navBackground.hex,
-      color: MINIMALIST_WARM_PALETTE_COLORS.navForeground.hex,
+      backgroundColor: MINIMALIST_WARM_PALETTE_COLORS.navBackground,
+      color: MINIMALIST_WARM_PALETTE_COLORS.navForeground,
     },
     Footer: {
-      backgroundColor: MINIMALIST_WARM_PALETTE_COLORS.footerBackground.hex,
-      color: MINIMALIST_WARM_PALETTE_COLORS.footerForeground.hex,
+      backgroundColor: MINIMALIST_WARM_PALETTE_COLORS.footerBackground,
+      color: MINIMALIST_WARM_PALETTE_COLORS.footerForeground,
     },
     ProductDetails: {
-      color: MINIMALIST_WARM_PALETTE_COLORS.foreground.hex,
-      buttonBackgroundColor: MINIMALIST_WARM_PALETTE_COLORS.primaryAccent.hex,
-      buttonTextColor: MINIMALIST_WARM_PALETTE_COLORS.buttonTextForeground.hex,
+      color: MINIMALIST_WARM_PALETTE_COLORS.foreground,
+      buttonBackgroundColor: MINIMALIST_WARM_PALETTE_COLORS.primaryAccent,
+      buttonTextColor: MINIMALIST_WARM_PALETTE_COLORS.buttonTextForeground,
     },
   },
 };
@@ -210,49 +210,45 @@ export const ECO_FRIENDLY_HEALTH_PALETTE: ColorPalette = {
   coreColors: ECO_FRIENDLY_HEALTH_PALETTE_COLORS,
   globalPalette: {
     theme: {
-      background: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.background.oklch,
-      DEFAULT: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.foreground.oklch,
+      background: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.background,
+      DEFAULT: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.foreground,
     },
     'theme-nav': {
-      background: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.navBackground.oklch,
-      DEFAULT: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.navForeground.oklch,
+      background: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.navBackground,
+      DEFAULT: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.navForeground,
     },
     'theme-button': {
-      background: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.primaryAccent.oklch,
-      DEFAULT: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.primaryAccent.oklch,
-      text: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.buttonTextForeground.oklch,
+      background: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.primaryAccent,
+      DEFAULT: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.primaryAccent,
+      text: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.buttonTextForeground,
     },
     'theme-footer': {
-      background: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.footerBackground.oklch,
-      DEFAULT: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.footerForeground.oklch,
+      background: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.footerBackground,
+      DEFAULT: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.footerForeground,
     },
     'theme-primary': {
-      DEFAULT: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.primaryAccent.oklch,
+      DEFAULT: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.primaryAccent,
     },
   },
   sectionThemes: {
     HeroSection: {
-      backgroundColor: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.background.hex,
-      color: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.foreground.hex,
-      buttonBackgroundColor:
-        ECO_FRIENDLY_HEALTH_PALETTE_COLORS.primaryAccent.hex,
-      buttonTextColor:
-        ECO_FRIENDLY_HEALTH_PALETTE_COLORS.buttonTextForeground.hex,
+      backgroundColor: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.background,
+      color: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.foreground,
+      buttonBackgroundColor: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.primaryAccent,
+      buttonTextColor: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.buttonTextForeground,
     },
     Nav: {
-      backgroundColor: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.navBackground.hex,
-      color: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.navForeground.hex,
+      backgroundColor: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.navBackground,
+      color: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.navForeground,
     },
     Footer: {
-      backgroundColor: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.footerBackground.hex,
-      color: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.footerForeground.hex,
+      backgroundColor: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.footerBackground,
+      color: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.footerForeground,
     },
     ProductDetails: {
-      color: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.foreground.hex,
-      buttonBackgroundColor:
-        ECO_FRIENDLY_HEALTH_PALETTE_COLORS.primaryAccent.hex,
-      buttonTextColor:
-        ECO_FRIENDLY_HEALTH_PALETTE_COLORS.buttonTextForeground.hex,
+      color: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.foreground,
+      buttonBackgroundColor: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.primaryAccent,
+      buttonTextColor: ECO_FRIENDLY_HEALTH_PALETTE_COLORS.buttonTextForeground,
     },
   },
 };
