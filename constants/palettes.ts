@@ -66,30 +66,24 @@ export interface SectionThemes {
 
 export interface ColorPalette {
   name: string;
-  description: string;
   coreColors: CoreColors;
   globalPalette: GlobalPalette;
   sectionThemes: SectionThemes;
 }
 
-export const DEFAULT_PALETTE: ColorPalette = genPallette(
-  'Default',
-  'A versatile and neutral theme with light grey backgrounds, dark grey text, and a classic blue accent for calls to action. Suitable for a wide range of stores needing a clean, professional look.',
-  {
-    background: '#f3f4f6', // Light Gray
-    foreground: '#374151', // Dark Gray
-    primaryAccent: '#3b82f6', // Blue
-    buttonTextForeground: '#ffffff', // White
-    navBackground: '#e5e7eb', // Slightly Darker Gray
-    navForeground: '#374151', // Dark Gray
-    footerBackground: '#374151', // Dark Gray
-    footerForeground: '#f3f4f6', // Light Gray
-  },
-);
+export const DEFAULT_PALETTE: ColorPalette = genPallette('Default', {
+  background: '#f3f4f6', // Light Gray
+  foreground: '#374151', // Dark Gray
+  primaryAccent: '#3b82f6', // Blue
+  buttonTextForeground: '#ffffff', // White
+  navBackground: '#e5e7eb', // Slightly Darker Gray
+  navForeground: '#374151', // Dark Gray
+  footerBackground: '#374151', // Dark Gray
+  footerForeground: '#f3f4f6', // Light Gray
+});
 
 export const MINIMALIST_WARM_PALETTE: ColorPalette = genPallette(
   'MinimalistWarm',
-  'A clean, modern, and airy theme with off-white and cream backgrounds, warm grey text, and a touch of earthy terracotta for highlights. Ideal for designs that feel calm, organic, or subtly sophisticated.',
   {
     background: '#fdfbf7', // Off-white/Cream
     foreground: '#5c5855', // Dark Warm Gray
@@ -104,7 +98,6 @@ export const MINIMALIST_WARM_PALETTE: ColorPalette = genPallette(
 
 export const ECO_FRIENDLY_HEALTH_PALETTE: ColorPalette = genPallette(
   'ecoFriendlyHealth',
-  'A calming and natural theme using earthy tones, soft greens, and off-whites. Perfect for stores emphasizing organic, sustainable, or health-focused products, creating a wholesome and trustworthy feel.',
   {
     background: '#f5f5f0', // Very light, slightly warm off-white/pale beige
     foreground: '#5d5a53', // Deep, earthy brown-gray
@@ -123,14 +116,9 @@ export const AVAILABLE_PALETTES: Record<string, ColorPalette> = {
   [ECO_FRIENDLY_HEALTH_PALETTE.name]: ECO_FRIENDLY_HEALTH_PALETTE,
 };
 
-function genPallette(
-  name: string,
-  description: string,
-  coreColors: CoreColors,
-) {
+function genPallette(name: string, coreColors: CoreColors) {
   return {
     name,
-    description,
     coreColors: coreColors,
     globalPalette: {
       theme: {
