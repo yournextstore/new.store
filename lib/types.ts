@@ -19,3 +19,7 @@ export interface PaginatedStoresResponse {
     itemsPerPage: number;
   };
 }
+
+export interface UserVotesMap {
+  [storeId: string]: 'up' | 'down';
+}
