@@ -360,6 +360,7 @@ function genPalette(name: string, description: string, coreColors: CoreColors) {
       ProductDetails: {
         color: coreColors.foreground,
         buttonBackgroundColor: coreColors.primaryAccent,
+        buttonHoverBackgroundColor: `${coreColors.primaryAccent}CC`, // 80% opacity
         buttonTextColor: coreColors.buttonTextForeground,
       },
     },
