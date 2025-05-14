@@ -22,7 +22,7 @@ async function getMyStores(
     // and hero_title, hero_description might be null or not present in DB
     // For now, selecting fields that are definitely in the DB.
     // We might need to adjust the query if hero_title/description are stored.
-    const result = await dbClient.query<Store>(
+    const result = await dbClient.query<Store & { final_store_json?: string }>(
       `SELECT 
           id, 
           user_id, 
@@ -31,7 +31,8 @@ async function getMyStores(
           hero_image_url, 
           is_starred, 
           created_at,
-          user_email
+          user_email,
+          final_store_json -- Added final_store_json
           -- If hero_title and hero_description are in the DB, add them here
           -- hero_title, 
           -- hero_description
@@ -41,11 +42,45 @@ async function getMyStores(
       [userId],
     );
     // Ensure created_at is string (ISO format) as expected by Store type
-    const stores = result.rows.map((store) => ({
-      ...store,
-      created_at: new Date(store.created_at).toISOString(),
-      // hero_image_url can be null from db, which matches our Store type
-    }));
+    const stores = result.rows.map((store) => {
+      let hero_title: string | undefined;
+      let hero_description: string | undefined;
+      let parsedJson: any;
+
+      if (store.final_store_json) {
+        try {
+          if (typeof store.final_store_json === 'string') {
+            parsedJson = JSON.parse(store.final_store_json);
+          } else {
+            // Assume it's already a parsed object
+            parsedJson = store.final_store_json;
+          }
+
+          const heroSection = parsedJson?.paths?.['/']?.find(
+            (section: any) => section.id === 'HeroSection',
+          );
+          if (heroSection?.data) {
+            hero_title = heroSection.data.title;
+            hero_description = heroSection.data.description;
+          }
+        } catch (e) {
+          console.error(
+            'Error parsing final_store_json for store:',
+            store.id,
+            e,
+          );
+          // Keep hero_title and hero_description as undefined if parsing fails
+        }
+      }
+
+      return {
+        ...store,
+        created_at: new Date(store.created_at).toISOString(),
+        hero_title,
+        hero_description,
+        // hero_image_url can be null from db, which matches our Store type
+      };
+    });
     return { stores };
   } catch (dbError: any) {
     console.error(
