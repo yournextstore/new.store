@@ -1,10 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { Star, ExternalLink, ChevronDown } from 'lucide-react';
+import { Star, ExternalLink, Search, ChevronDown } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useToast } from '@/hooks/use-toast';
 import {
   Dialog,
   DialogContent,
@@ -92,12 +95,21 @@ export default function StoreGrid({
 
                 {/* Prompt with expand option */}
                 <div className="mt-2">
-                  <div className="flex justify-between items-start gap-2">
-                    <p className="text-sm line-clamp-2">{store.prompt_text}</p>
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="h-px bg-border flex-grow" />
+                    <span className="text-xs font-medium text-muted-foreground px-1">
+                      PROMPT
+                    </span>
+                    <div className="h-px bg-border flex-grow" />
+                  </div>
+                  <div className="relative">
+                    <p className="text-sm line-clamp-2 pr-6">
+                      {store.prompt_text}
+                    </p>
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-6 w-6 p-0 shrink-0 mt-0.5"
+                      className="h-6 w-6 p-0 absolute top-0 right-0"
                       onClick={() => openPromptDialog(store)}
                     >
                       <ChevronDown className="h-4 w-4" />
@@ -147,7 +159,13 @@ export default function StoreGrid({
               )}
             </div>
             <div>
-              <h4 className="text-sm font-medium mb-2">Original Prompt:</h4>
+              <div className="flex items-center gap-2 mb-2">
+                <div className="h-px bg-border flex-grow" />
+                <span className="text-xs font-medium text-muted-foreground px-1">
+                  PROMPT
+                </span>
+                <div className="h-px bg-border flex-grow" />
+              </div>
               <p className="text-sm">{selectedStore?.prompt_text}</p>
             </div>
             <div className="flex justify-between">
