@@ -10,6 +10,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import Image from 'next/image';
 import Link from 'next/link';
+import { toggleStarAction } from './actions'; // Import the server action
 
 interface Store {
   id: string;
@@ -55,6 +56,7 @@ export default function MyStoresClient({
 
   const handleToggleStar = async (storeId: string) => {
     const originalStores = [...stores];
+    // Optimistic update
     setStores((prevStores) =>
       prevStores.map((store) =>
         store.id === storeId
@@ -65,34 +67,34 @@ export default function MyStoresClient({
 
     startToggleStarTransition(async () => {
       try {
-        const response = await fetch(`/api/me/stores/${storeId}/star`, {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        });
+        const result = await toggleStarAction(storeId);
 
-        if (!response.ok) {
-          const errorData = await response
-            .json()
-            .catch(() => ({ message: 'Failed to update star status' }));
-          throw new Error(errorData.error || 'Failed to update star status');
+        if (result.error) {
+          throw new Error(result.error || 'Failed to update star status');
         }
 
-        const result = await response.json();
-        setStores((prevStores) =>
-          prevStores.map((store) =>
-            store.id === storeId
-              ? { ...store, is_starred: result.is_starred }
-              : store,
-          ),
-        );
+        // Server action returns { id, is_starred } on success
+        // The optimistic update usually handles the visual change immediately.
+        // revalidatePath in the server action ensures data consistency.
+        // If we want to be absolutely sure the client state matches the db after the action:
+        if (result.id && typeof result.is_starred === 'boolean') {
+          const updatedIsStarred = result.is_starred;
+          setStores((prevStores) =>
+            prevStores.map((store) =>
+              store.id === result.id // Use result.id to be precise
+                ? { ...store, is_starred: updatedIsStarred }
+                : store,
+            ),
+          );
+        }
 
         toast({
           title: 'Success',
-          description: `Store ${result.is_starred ? 'starred' : 'unstarred'} successfully.`,
+          // Use result.is_starred for the toast message if available, otherwise rely on optimistic update view
+          description: `Store ${typeof result.is_starred === 'boolean' ? (result.is_starred ? 'starred' : 'unstarred') : 'status updated'} successfully.`,
         });
       } catch (error: any) {
+        // Revert optimistic update on error
         setStores(originalStores);
         toast({
           title: 'Error',
