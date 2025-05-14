@@ -20,41 +20,34 @@ interface Store {
   created_at: string;
 }
 
-export default function MyStoresClient() {
-  const [stores, setStores] = useState<Store[]>([]);
+interface MyStoresClientProps {
+  initialStores: Store[];
+  initialFetchError: string | null;
+}
+
+export default function MyStoresClient({
+  initialStores,
+  initialFetchError,
+}: MyStoresClientProps) {
+  const [stores, setStores] = useState<Store[]>(initialStores);
   const [filteredStores, setFilteredStores] = useState<Store[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(
+    initialFetchError,
+  );
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('all');
   const { toast } = useToast();
   const [isTogglingStar, startToggleStarTransition] = useTransition();
 
   useEffect(() => {
-    async function fetchStores() {
-      setIsLoading(true);
-      setFetchError(null);
-      try {
-        const response = await fetch('/api/me/stores');
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => null);
-          throw new Error(
-            errorData?.error || `Failed to fetch stores: ${response.status}`,
-          );
-        }
-        const data: Store[] = await response.json();
-        setStores(data);
-      } catch (error: any) {
-        console.error('Failed to fetch stores:', error);
-        setFetchError(
-          error.message || 'An unknown error occurred while fetching stores.',
-        );
-      } finally {
-        setIsLoading(false);
-      }
+    if (!initialFetchError) {
+      setStores(initialStores);
+    } else {
+      setStores([]);
+      setFilteredStores([]);
     }
-    fetchStores();
-  }, []);
+  }, [initialStores, initialFetchError]);
 
   useEffect(() => {
     filterStores();
