@@ -42,6 +42,7 @@ CREATE TABLE generated_stores (
     prompt_text TEXT NOT NULL,
     store_url TEXT NOT NULL,
     hero_image_url TEXT NOT NULL,
+    final_store_json JSONB NULL, -- Stores the complete JSON sent to YNS
     is_starred BOOLEAN DEFAULT FALSE NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
 );

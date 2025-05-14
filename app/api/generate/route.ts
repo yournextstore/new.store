@@ -300,8 +300,8 @@ export async function POST(req: Request) {
         try {
           dbClient = await pool.connect();
           const insertQuery = `
-              INSERT INTO generated_stores (user_id, user_email, prompt_text, store_url, hero_image_url)
-              VALUES ($1, $2, $3, $4, $5);
+              INSERT INTO generated_stores (user_id, user_email, prompt_text, store_url, hero_image_url, final_store_json)
+              VALUES ($1, $2, $3, $4, $5, $6);
             `;
           await dbClient.query(insertQuery, [
             userId,
@@ -309,6 +309,7 @@ export async function POST(req: Request) {
             userPrompt,
             ynsResult.url,
             heroImageUrlToSave, // Now guaranteed to be a string
+            JSON.stringify(finalJson),
           ]);
           console.log(
             `Successfully saved generated store metadata for user ${userId} (Email: ${userEmail}). URL: ${ynsResult.url}`,
