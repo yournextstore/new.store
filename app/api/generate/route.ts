@@ -3,6 +3,7 @@ import { generateText } from 'ai';
 import { openai } from '@ai-sdk/openai';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import util from 'node:util';
 import type { PoolClient } from 'pg'; // Import PoolClient for typing
 import type { GenerationMode } from '../../lib/image-generation';
 import { applyTheme } from '../../lib/theme';
@@ -65,11 +66,12 @@ export async function POST(req: Request) {
       path.join(process.cwd(), 'app/api/generate/gen-store-json-prompt.md'),
       'utf-8',
     );
-    console.log('Loaded `gen-store-json-prompt.md`');
-    console.log('prototypePrompt', prototypePrompt);
 
     const body = await req.json();
     const userPrompt = body.prompt;
+
+    console.log('userPrompt', userPrompt);
+
     const userId = body.userId;
 
     // --- Get User Email from Session ---
@@ -143,6 +145,9 @@ export async function POST(req: Request) {
 
     const startTime = Date.now(); // Record start time
 
+    // log calling the gpt-4o model
+    console.log('Calling gpt-4o model with the full prompt...');
+
     // Call the AI using Vercel AI SDK
     const { text } = await generateText({
       // model: openai.chat('gpt-4o'), // Or use openai.chat if preferred
@@ -182,7 +187,11 @@ export async function POST(req: Request) {
     // Log the raw JSON from AI before any modifications
     console.log(
       'Raw JSON from AI (before theme injection):',
-      JSON.stringify(generatedJson, null, 2),
+      util.inspect(generatedJson, {
+        showHidden: false,
+        depth: null,
+        colors: true,
+      }),
     );
 
     // Extract imageStyle from the original AI output, as it's independent of theme injection.
@@ -208,7 +217,11 @@ export async function POST(req: Request) {
     // Log the JSON AFTER theme injection
     console.log(
       'JSON after theme injection (before image replacement):',
-      JSON.stringify(themedJson, null, 2),
+      util.inspect(themedJson, {
+        showHidden: false,
+        depth: null,
+        colors: true,
+      }),
     );
 
     // --- Replace Image Placeholders ---
