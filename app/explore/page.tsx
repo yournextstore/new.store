@@ -1,5 +1,4 @@
 import { Suspense } from 'react';
-import { headers } from 'next/headers';
 import { getAuth } from '@/lib/auth';
 import { pool } from '@/lib/db';
 import type { PoolClient } from 'pg';
