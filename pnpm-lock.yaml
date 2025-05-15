@@ -44,6 +44,9 @@ importers:
       '@next/env':
         specifier: 15.3.0
         version: 15.3.0
+      '@opentelemetry/api':
+        specifier: ^1.9.0
+        version: 1.9.0
       '@radix-ui/react-alert-dialog':
         specifier: ^1.1.2
         version: 1.1.6(@types/react-dom@19.1.2(@types/react@19.1.2))(@types/react@19.1.2)(react-dom@19.2.0-canary-b04254fd-20250415(react@19.2.0-canary-b04254fd-20250415))(react@19.2.0-canary-b04254fd-20250415)

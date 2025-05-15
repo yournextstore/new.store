@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { generateText } from 'ai';
 import { openai } from '@ai-sdk/openai';
+import { trace, SpanStatusCode } from '@opentelemetry/api';
+import type { Span } from '@opentelemetry/api'; // Span used as type
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import util from 'node:util';
@@ -11,6 +13,8 @@ import { replaceImagePlaceholders } from '../../lib/image';
 import { pool } from '@/lib/db'; // Using @ alias for path
 import { auth } from '@/lib/auth'; // For getting user session
 import { headers } from 'next/headers'; // For getting headers for session
+
+const tracer = trace.getTracer('ai-generate-route-tracer');
 
 /**
  * Injects a default theme (global and section-specific colors) into the AI-generated JSON.
@@ -27,6 +31,39 @@ import { headers } from 'next/headers'; // For getting headers for session
  * @param imageStyle The image style (general style for product images consistent with the store concept).
  * @returns The modified JSON data.
  */
+
+/*
+  OpenTelemetry Tracing Strategy (Current Implementation):
+  We are using the `tracer.startSpan()` pattern for creating spans, followed by
+  a `try/catch/finally` block to manage the span's lifecycle (`span.end()`)
+  and error reporting (`span.recordException()`, `span.setStatus()`).
+  This approach is chosen for minimal code changes and to keep the original
+  function structure more intact.
+
+  Alternative Pattern: `tracer.startActiveSpan('span-name', async (span) => { ... })`
+    - This pattern automatically manages setting the created span as "active" in the
+      current asynchronous context, which is robust for ensuring child spans
+      (even in other modules) correctly parent to this span. However, it introduces
+      an additional callback layer, leading to more nested code.
+
+  Chosen Pattern Rationale (`tracer.startSpan()`):
+    - Relies on the existing active context (e.g., one set by Vercel for
+      the serverless function invocation) for child spans to correctly parent themselves.
+      For typical Vercel deployments, an active context is usually present, and
+      Node.js async_hooks help with context propagation.
+    - If issues with parent-child span relationships arise during testing,
+      we may need to revisit this and either use `tracer.startActiveSpan()`
+      or manually manage context with `context.with(trace.setSpan(context.active(), span), () => { ... })`
+      for specific operations.
+
+  Current Scope & Future Work:
+  - Currently, tracing is applied to the four major external service calls/
+    logical blocks: AI text generation, image processing orchestration,
+    YNS API call, and database save.
+  - Future enhancements could include more granular spans within these blocks
+    (e.g., individual image generation steps inside `replaceImagePlaceholders`),
+    spans for JSON parsing, theme application, etc., to provide deeper insights.
+*/
 
 // Helper function to extract Hero Image URL
 function extractHeroImageUrl(json: any): string | null {
@@ -60,6 +97,12 @@ function extractHeroImageUrl(json: any): string | null {
 }
 
 export async function POST(req: Request) {
+  let llmTextGenerationTimeMs: number | null = null;
+  let imageReplacementTimeMs: number | null = null;
+  let ynsApiCallTimeMs: number | null = null;
+  let databaseSaveTimeMs: number | string = 'Skipped';
+
+  const rootSpan: Span = tracer.startSpan('generate-store-request');
   try {
     // main prompt that generates the complete store JSON representation
     const prototypePrompt = await fs.readFile(
@@ -69,12 +112,6 @@ export async function POST(req: Request) {
 
     const body = await req.json();
     const userPrompt = body.prompt;
-
-    // Timing variables
-    let llmTextGenerationTimeMs: number | null = null; // Renamed from generationTimeMs
-    let imageReplacementTimeMs: number | null = null;
-    let ynsApiCallTimeMs: number | null = null;
-    let databaseSaveTimeMs: number | string = 'Skipped'; // Default to "Skipped"
 
     console.log('userPrompt', userPrompt);
 
@@ -101,6 +138,8 @@ export async function POST(req: Request) {
         sessionError,
       );
       // Email will remain null
+      rootSpan.recordException(sessionError);
+      rootSpan.setAttribute('session.error', true);
     }
     // --- End Get User Email from Session ---
 
@@ -121,6 +160,10 @@ export async function POST(req: Request) {
     console.log(`Using image generation mode: ${imageGenerationMode}`);
 
     if (!userPrompt || typeof userPrompt !== 'string') {
+      rootSpan.setStatus({
+        code: SpanStatusCode.ERROR,
+        message: 'Prompt is required',
+      });
       return NextResponse.json(
         { error: 'Prompt is required and must be a string' },
         { status: 400 },
@@ -128,6 +171,10 @@ export async function POST(req: Request) {
     }
 
     if (!userId || typeof userId !== 'string') {
+      rootSpan.setStatus({
+        code: SpanStatusCode.ERROR,
+        message: 'User ID is required',
+      });
       return NextResponse.json(
         { error: 'User ID is required and must be a string' },
         { status: 400 },
@@ -417,5 +464,7 @@ Latency Summary for Request (User: ${logIdentifier}):
       { error: 'Internal Server Error (Unknown)' },
       { status: 500 },
     );
+  } finally {
+    rootSpan.end();
   }
 }
