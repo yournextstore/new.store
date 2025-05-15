@@ -70,6 +70,12 @@ export async function POST(req: Request) {
     const body = await req.json();
     const userPrompt = body.prompt;
 
+    // Timing variables
+    let llmTextGenerationTimeMs: number | null = null; // Renamed from generationTimeMs
+    let imageReplacementTimeMs: number | null = null;
+    let ynsApiCallTimeMs: number | null = null;
+    let databaseSaveTimeMs: number | string = 'Skipped'; // Default to "Skipped"
+
     console.log('userPrompt', userPrompt);
 
     const userId = body.userId;
@@ -143,12 +149,13 @@ export async function POST(req: Request) {
     // Construct the full prompt for the AI
     const fullPrompt = prototypePrompt.replace('{user_prompt}', userPrompt);
 
-    const startTime = Date.now(); // Record start time
+    const overallJsonGenerationStartTime = Date.now(); // Start for total JSON generation
 
     // log calling the gpt-4o model
     console.log('Calling gpt-4o model with the full prompt...');
 
     // Call the AI using Vercel AI SDK
+    const llmStartTime = Date.now();
     const { text } = await generateText({
       // model: openai.chat('gpt-4o'), // Or use openai.chat if preferred
       model: openai.responses('gpt-4o'),
@@ -157,10 +164,9 @@ export async function POST(req: Request) {
       system:
         'You are an AI assistant designed to output ONLY raw JSON data. Do not include any explanations, markdown formatting, or text outside the JSON structure.',
     });
-
-    const endTime = Date.now(); // Record end time
-    const generationTimeMs = endTime - startTime; // Calculate duration
-    console.log(`AI generation took ${generationTimeMs}ms`);
+    const llmEndTime = Date.now();
+    llmTextGenerationTimeMs = llmEndTime - llmStartTime;
+    console.log(`AI text generation took ${llmTextGenerationTimeMs}ms`);
 
     // Parse the AI's response as JSON
     let generatedJson: unknown;
@@ -234,10 +240,13 @@ export async function POST(req: Request) {
       imageStyle, // Pass the original imageStyle
     );
     const endTimeReplace = Date.now();
-    console.log(
-      `Image replacement took ${endTimeReplace - startTimeReplace}ms`,
-    );
+    imageReplacementTimeMs = endTimeReplace - startTimeReplace; // Calculate duration
+    console.log(`Image replacement took ${imageReplacementTimeMs}ms`);
     // --- End Image Placeholder Replacement ---
+
+    const overallJsonGenerationEndTime = Date.now(); // End for total JSON generation
+    const totalJsonGenerationTimeMs =
+      overallJsonGenerationEndTime - overallJsonGenerationStartTime;
 
     // --- Call YNS API ---
     const ynsApiUrl = `${process.env.NEXT_PUBLIC_YNS_API_URL}/admin/ai-test/import?userId=${userId}`;
@@ -260,6 +269,7 @@ export async function POST(req: Request) {
     }
 
     try {
+      const startTimeYnsApi = Date.now();
       const ynsResponse = await fetch(ynsApiUrl, {
         method: 'POST',
         headers: {
@@ -268,6 +278,8 @@ export async function POST(req: Request) {
         },
         body: JSON.stringify(finalJson), // Send the JSON with injected themes and image URLs
       });
+      const endTimeYnsApi = Date.now();
+      ynsApiCallTimeMs = endTimeYnsApi - startTimeYnsApi;
 
       if (!ynsResponse.ok) {
         const errorText = await ynsResponse.text();
@@ -316,6 +328,7 @@ export async function POST(req: Request) {
               INSERT INTO generated_stores (user_id, user_email, prompt_text, store_url, hero_image_url, final_store_json)
               VALUES ($1, $2, $3, $4, $5, $6) RETURNING id;
             `;
+          const startTimeDbSave = Date.now();
           const result = await dbClient.query(insertQuery, [
             userId,
             userEmail,
@@ -324,6 +337,9 @@ export async function POST(req: Request) {
             heroImageUrlToSave, // Now guaranteed to be a string
             JSON.stringify(finalJson),
           ]);
+          const endTimeDbSave = Date.now();
+          databaseSaveTimeMs = endTimeDbSave - startTimeDbSave;
+
           const newEntryId = result.rows[0]?.id;
           console.log(
             `Successfully saved generated store metadata for user ${userId} (Email: ${userEmail}). URL: ${ynsResult.url}. DB Entry ID: ${newEntryId}`,
@@ -346,12 +362,29 @@ export async function POST(req: Request) {
       }
       // --- End Save to generated_stores table ---
 
-      // Return the YNS store URL, the *final* JSON (with replaced images), and generation times
+      // --- Latency Summary Logging ---
+      const logIdentifier =
+        userEmail || `User ID: ${userId}` || 'Unknown User/ID';
+      const formatMs = (ms: number | string | null) => {
+        if (typeof ms === 'string') return ms;
+        if (ms === null) return 'Not executed or failed';
+        return `${ms.toLocaleString('en-US')}ms`;
+      };
+
+      console.log(`
+Latency Summary for Request (User: ${logIdentifier}):
+- AI Text Generation: ${formatMs(llmTextGenerationTimeMs)}
+- Image Processing (${imageGenerationMode}): ${formatMs(imageReplacementTimeMs)}
+- YNS API Call: ${formatMs(ynsApiCallTimeMs)}
+- Database Save: ${formatMs(databaseSaveTimeMs)}
+`);
+      // --- End Latency Summary Logging ---
+
       return NextResponse.json({
         storeUrl: ynsResult.url,
         storeJson: finalJson, // Return the modified JSON (which now includes injected themes and replaced images)
-        generationTimeMs,
-        imageReplacementTimeMs: endTimeReplace - startTimeReplace,
+        generationTimeMs: totalJsonGenerationTimeMs, // This is now the end-to-end JSON gen time
+        imageReplacementTimeMs: imageReplacementTimeMs, // Specific time for image replacement
       });
     } catch (ynsApiError) {
       console.error('Error calling YNS API:', ynsApiError);
