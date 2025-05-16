@@ -9,10 +9,7 @@
 import { openai } from '@ai-sdk/openai';
 import { pool } from '@/lib/db';
 import { embed } from 'ai';
-import {
-  generateAndUploadPlaceholders,
-  processSinglePlaceholder,
-} from './image-generation'; // Assuming image-generation.ts is in the same app/lib directory
+import { processSinglePlaceholder } from './image-generation'; // Assuming image-generation.ts is in the same app/lib directory
 import type { GenerationMode } from './image-generation';
 
 // --- Constants & Types ---
@@ -72,12 +69,12 @@ async function findImageInDB(
 
         if (result1.rows.length > 0) {
           bestMatchUrl = result1.rows[0].blob_url;
-          console.log(
+          console.debug(
             `DB Hero Match (Type+Align+Thresh): Found ${bestMatchUrl} for alignment ${alignment}`,
           );
         } else {
           // Query 2: Image Type + Alignment Only (Fallback 1)
-          console.log(
+          console.debug(
             `DB Hero Fallback 1: Searching type "${imageType}" alignment "${alignment}" without threshold...`,
           );
           const query2 = `
@@ -96,11 +93,11 @@ async function findImageInDB(
           ]);
           if (result2.rows.length > 0) {
             bestMatchUrl = result2.rows[0].blob_url;
-            console.log(
+            console.debug(
               `DB Hero Match (Type+Align Only): Found ${bestMatchUrl} for alignment ${alignment}`,
             );
           } else {
-            console.log(
+            console.debug(
               `DB Hero Fallback 2: No match found for type "${imageType}" alignment "${alignment}".`,
             );
             // Fallback 3: Maybe just find *any* hero image matching description?
@@ -124,9 +121,9 @@ async function findImageInDB(
         ]);
         if (result.rows.length > 0) {
           bestMatchUrl = result.rows[0].blob_url;
-          console.log(`DB Product Match: Found ${bestMatchUrl}`);
+          console.debug(`DB Product Match: Found ${bestMatchUrl}`);
         } else {
-          console.log(
+          console.debug(
             `DB Product Match: No suitable match found below threshold for description "${description.substring(0, 50)}..."`,
           );
           // Consider fallback for products too? (e.g., ignore threshold)
@@ -174,12 +171,6 @@ export async function replaceImagePlaceholders(
   imageMode: GenerationMode,
   imageStyle?: string | null,
 ): Promise<any> {
-  const rootStartTime = Date.now(); // Establish the root start time here
-  const logWithTime = (message: string) => {
-    const elapsed = Date.now() - rootStartTime;
-    console.log(`[T+${elapsed}ms] ${message}`);
-  };
-
   if (!pool) {
     console.warn('Database pool not available. Skipping image replacement.');
     return json;
@@ -308,11 +299,11 @@ export async function replaceImagePlaceholders(
   }
 
   if (imageOperations.length === 0) {
-    logWithTime('No image placeholders found to process.');
+    console.log('No image placeholders found to process.');
     return json;
   }
 
-  logWithTime(
+  console.log(
     `Collected ${imageOperations.length} image operations. Starting processing...`,
   );
 
@@ -332,7 +323,7 @@ export async function replaceImagePlaceholders(
     try {
       if (imageMode === 'stock') {
         // --- STOCK MODE ---
-        logWithTime(
+        console.debug(
           `[Stock Mode] ${imageType} Image Request: Align "${alignmentForGeneration ?? 'N/A'}", Desc: "${description.substring(0, 50)}..."`,
         );
         const stockMatchUrl = await findImageInDB(
@@ -343,12 +334,12 @@ export async function replaceImagePlaceholders(
         if (stockMatchUrl) {
           targetObject[targetKey] = stockMatchUrl;
           successfulMatches++;
-          logWithTime(
+          console.debug(
             `[Stock Mode] ${imageType} Image Match: Replaced for "${description.substring(0, 30)}..." with ${stockMatchUrl}`,
           );
         } else {
           targetObject[targetKey] = FALLBACK_IMAGE_URL;
-          logWithTime(
+          console.warn(
             `[Stock Mode] ${imageType} Fallback (Stock): No DB match for "${description.substring(0, 30)}...". Using fallback.`,
           );
         }
@@ -357,7 +348,7 @@ export async function replaceImagePlaceholders(
         if (imageType === 'hero') heroGenerationAttempted++;
         else productGenerationAttempted++;
 
-        logWithTime(
+        console.debug(
           `[Generate Mode - ${imageMode}] ${imageType} Image Request: Align "${alignmentForGeneration ?? 'N/A'}", Desc: "${description.substring(0, 50)}..."`,
         );
 
@@ -375,19 +366,18 @@ export async function replaceImagePlaceholders(
             imageType,
             alignmentForGeneration, // This is 'left' | 'right' | 'center' for heroes
             imageType === 'product' ? imageStyle : null, // imageStyle only for products
-            rootStartTime,
           );
 
           if (generationResult?.blobUrl) {
             targetObject[targetKey] = generationResult.blobUrl;
             if (imageType === 'hero') heroGenerationSucceeded++;
             else productGenerationSucceeded++;
-            logWithTime(
+            console.debug(
               `[Generate Mode - ${imageMode}] ${imageType} Image Success: Replaced for "${description.substring(0, 30)}..." with ${generationResult.blobUrl}`,
             );
           } else {
             // Generation failed
-            logWithTime(
+            console.warn(
               `[Generate Mode - ${imageMode}] ${imageType} Generation Failed for "${description.substring(0, 30)}...". Attempting stock fallback if hero.`,
             );
             if (imageType === 'hero') {
@@ -399,19 +389,19 @@ export async function replaceImagePlaceholders(
               if (stockFallbackUrl) {
                 targetObject[targetKey] = stockFallbackUrl;
                 // successfulMatches++; // Optionally count this as a "successful recovery"
-                logWithTime(
+                console.info(
                   `[Generate Mode - ${imageMode}] Hero Stock Fallback Success: Used ${stockFallbackUrl}`,
                 );
               } else {
                 targetObject[targetKey] = FALLBACK_IMAGE_URL;
-                logWithTime(
+                console.warn(
                   `[Generate Mode - ${imageMode}] Hero Stock Fallback Failed. Using final fallback URL.`,
                 );
               }
             } else {
               // Product generation failed, no further fallback
               targetObject[targetKey] = FALLBACK_IMAGE_URL;
-              logWithTime(
+              console.warn(
                 `[Generate Mode - ${imageMode}] Product using fallback URL after generation failure.`,
               );
             }
@@ -428,13 +418,13 @@ export async function replaceImagePlaceholders(
   });
 
   await Promise.allSettled(processingPromises);
-  logWithTime(
+  console.log(
     `Finished processing all ${imageOperations.length} image operations.`,
   );
 
   // --- Log Statistics ---
   if (totalPlaceholders > 0) {
-    logWithTime('--- Image Placeholder Stats ---');
+    console.log('--- Image Placeholder Stats ---');
     console.log(`Total Placeholders Processed: ${totalPlaceholders}`);
 
     if (imageMode !== 'stock') {
@@ -482,6 +472,6 @@ export async function replaceImagePlaceholders(
     // console.log('Image Placeholder Stats: No placeholders found to process.');
   }
 
-  logWithTime('Returning final JSON');
+  console.log('Returning final JSON');
   return json;
 }

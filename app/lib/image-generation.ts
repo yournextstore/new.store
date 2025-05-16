@@ -35,7 +35,7 @@ async function downloadImageFromUrl(getimgUrl: string): Promise<{
   contentType: string | null;
 } | null> {
   try {
-    console.log(`[Image Util] Downloading image from: ${getimgUrl}`);
+    console.debug(`[Image Util] Downloading image from: ${getimgUrl}`);
     const fetchResponse = await fetch(getimgUrl);
     if (!fetchResponse.ok) {
       throw new Error(
@@ -45,7 +45,7 @@ async function downloadImageFromUrl(getimgUrl: string): Promise<{
     const imageArrayBuffer = await fetchResponse.arrayBuffer();
     const imageBuffer = Buffer.from(imageArrayBuffer); // Convert ArrayBuffer to Buffer
     const contentType = fetchResponse.headers.get('content-type');
-    console.log(`[Image Util] Downloaded ${imageBuffer.byteLength} bytes.`);
+    console.debug(`[Image Util] Downloaded ${imageBuffer.byteLength} bytes.`);
 
     // Determine Filename from getimg.ai URL
     const parsedGetimgUrl = new URL(getimgUrl);
@@ -191,7 +191,6 @@ interface ProcessedImageResult {
  * @param imageType The type of the image.
  * @param alignment The alignment of the image.
  * @param imageStyle The image style (general style for product images consistent with the store concept).
- * @param rootStartTime Optional root start time for consistent logging
  * @returns A promise resolving to the ProcessedImageResult.
  */
 export async function processSinglePlaceholder(
@@ -200,19 +199,7 @@ export async function processSinglePlaceholder(
   imageType: 'product' | 'hero',
   alignment?: 'left' | 'right' | 'center' | null,
   imageStyle?: string | null,
-  rootStartTime?: number, // Added: root start time
 ): Promise<ProcessedImageResult> {
-  const operationStartTime = Date.now(); // Keep for individual operation timing
-  const getElapsedTime = () =>
-    rootStartTime
-      ? Date.now() - rootStartTime
-      : Date.now() - operationStartTime;
-
-  const logWithTime = (message: string) => {
-    const elapsed = getElapsedTime();
-    console.log(`[T+${elapsed}ms] [Single] ${message}`);
-  };
-
   // Variables to hold intermediate results
   let externalImageUrl: string | null = null; // URL from GetImg/Fal
   let blobUrlFromOpenAI: string | null = null; // Direct Blob URL from OpenAI helper
@@ -232,7 +219,7 @@ export async function processSinglePlaceholder(
 
   try {
     // 1. Log Original Description & Construct Modified Prompt
-    logWithTime(
+    console.log(
       `Starting processing for description: ${placeholder.description.substring(0, 50)}...`,
     );
 
@@ -254,15 +241,15 @@ export async function processSinglePlaceholder(
       }
       modifiedPrompt = `${placeholder.description}. ${alignmentInstruction}`;
       // Note: imageStyle is currently ignored for heroes, based on user feedback.
-      console.log(
+      console.debug(
         `[Image Gen Util - ${generationMode}] Using Style: Alignment-based Prompt (Hero)`,
       );
     } else if (imageType === 'product') {
       // Construct prompt for Product images (existing logic)
-      const defaultStyle = `Displayed in perfect profile against a plain light-grey studio background, centred, soft diffused lighting.\\n\\nClean, calm, modern — ideal for premium e-commerce display.`;
+      const defaultStyle = `Displayed in perfect profile against a plain light-grey studio background, centred, soft diffused lighting.\n\nClean, calm, modern — ideal for premium e-commerce display.`;
       const finalStyle = imageStyle?.trim() ? imageStyle : defaultStyle;
-      modifiedPrompt = `${placeholder.description}\\n\\n${finalStyle}`;
-      console.log(
+      modifiedPrompt = `${placeholder.description}\n\n${finalStyle}`;
+      console.debug(
         `[Image Gen Util - ${generationMode}] Using Style:`,
         imageStyle?.trim()
           ? `"${imageStyle}" (From Settings)`
@@ -274,13 +261,13 @@ export async function processSinglePlaceholder(
       throw new Error(`Unsupported imageType: ${imageType}`);
     }
 
-    console.log(
+    console.debug(
       `[Image Gen Util - ${generationMode}] Final generation prompt:`,
       modifiedPrompt,
     );
 
     // 2. Call the selected Generation API
-    logWithTime(`Calling ${generationMode} API...`);
+    console.log(`Calling ${generationMode} API...`);
     switch (generationMode) {
       case 'getimg.ai':
         externalImageUrl = await callGetImgApi(modifiedPrompt);
@@ -299,7 +286,7 @@ export async function processSinglePlaceholder(
         );
         throw new Error(`Unknown generation mode: ${generationMode}`);
     }
-    logWithTime(`API call completed`);
+    console.log(`API call completed`);
 
     // Check if API call failed
     if (!externalImageUrl && !blobUrlFromOpenAI) {
@@ -331,7 +318,7 @@ export async function processSinglePlaceholder(
     } else if (externalImageUrl) {
       // GetImg/Fal returned an external URL, need to download and upload
       // 3. Download Image
-      console.log(
+      console.debug(
         `[Image Gen Util - ${generationMode}] Downloading from external URL...`,
       );
       downloadResult = await downloadImageFromUrl(externalImageUrl);
@@ -344,14 +331,14 @@ export async function processSinglePlaceholder(
       const blobPathname = `generated/${filename}`; // Define Blob pathname
 
       // 4. Upload to Vercel Blob
-      console.log(
+      console.debug(
         `[Image Gen Util - ${generationMode}] Uploading image to: ${blobPathname}...`,
       );
       blobResult = await put(blobPathname, imageBuffer, {
         access: 'public',
         contentType: contentType || undefined,
       });
-      console.log(
+      console.debug(
         `[Image Gen Util - ${generationMode}] Upload successful. Blob URL: ${blobResult.url}`,
       );
       finalBlobUrl = blobResult.url;
@@ -404,10 +391,10 @@ export async function processSinglePlaceholder(
     }
 
     // If all steps succeeded
-    logWithTime(`Successfully completed all processing steps`);
+    console.log(`Successfully completed all processing steps`);
     return { originalUrl: placeholder.originalUrl, blobUrl: finalBlobUrl };
   } catch (error) {
-    logWithTime(
+    console.error(
       `Failed processing: ${error instanceof Error ? error.message : error}`,
     );
     return { originalUrl: placeholder.originalUrl, blobUrl: null };
