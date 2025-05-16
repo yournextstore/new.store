@@ -198,14 +198,15 @@ export async function POST(req: Request) {
 
     const overallJsonGenerationStartTime = Date.now(); // Start for total JSON generation
 
+    const modelName = 'gpt-4.1';
+
     // log calling the gpt-4o model
-    console.log('Calling gpt-4o model with the full prompt...');
+    console.log(`Calling ${modelName} model with the full prompt...`);
 
     // Call the AI using Vercel AI SDK
     const llmStartTime = Date.now();
     const { text } = await generateText({
-      // model: openai.chat('gpt-4o'), // Or use openai.chat if preferred
-      model: openai.responses('gpt-4o'),
+      model: openai.responses(modelName),
       prompt: fullPrompt,
       // Optional: Add system prompt or other parameters if needed
       system:

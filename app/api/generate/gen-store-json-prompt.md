@@ -317,6 +317,132 @@ Example: For a hero image for a modern science fiction bookstore, a good descrip
 **URL Encoding:**
 The generated description **must** be URL-encoded before being included in the placeholder URL.
 
+#### 9. An example of the expected output
+
+Below is a JSON template for describing an ecommerce store. This is a sample structure for generating any kind of online store.
+
+⚠️ Important:
+- Do not copy the example store’s products, descriptions, or branding.
+- This is not a shoe store generator—this is a schema for any store.
+- Your task is to use this structure, but invent all content and adapt it to the chosen theme (e.g., books, plants, gadgets, food, toys, etc.).
+- When generating a new store, vary the theme, products, and descriptions completely.
+
+Here is the sample template:
+
+```json
+{
+  "paths": {
+    "%layout": [
+      {
+        "id": "Nav",
+        "data": {
+          "title": "Minimalist Shoes",
+          "links": [
+            { "label": "Home", "href": "/" },
+            { "label": "Products", "href": "/products" }
+          ],
+          "searchBar": { "show": true }
+        }
+      },
+      { "id": "Children", "data": {} },
+      {
+        "id": "Footer",
+        "data": {
+          "sections": [
+            {
+              "header": "Shop",
+              "links": [
+                { "label": "Home", "href": "/" },
+                { "label": "Products", "href": "/products" }
+              ]
+            }
+          ],
+          "name": "Minimalist Shoes",
+          "tagline": "Designed for everyday comfort, style, and motion.",
+          "credits": true
+        }
+      }
+    ],
+    "/": [
+      {
+        "id": "HeroSection",
+        "data": {
+          "title": "Step into Comfort",
+          "description": "Discover our range of minimalist shoes designed for style and motion.",
+          "button": { "label": "Shop Now", "path": "/products" },
+          "image": {
+            "src": "https://yns.img?description=An%20overhead%20view%20of%20a%20sleek%2C%20modern%20shoe%20display%20showcasing%20minimalist%20designs%20in%20neutral%20tones.",
+            "alt": "Minimalist shoe display"
+          },
+          "boxAlignment": "left",
+          "textAlignment": "left"
+        }
+      },
+      {
+        "id": "ProductGrid",
+        "data": { "productLayout": "grid", "first": 12, "collection": null }
+      }
+    ],
+    "/products": [
+      {
+        "id": "ProductGrid",
+        "data": { "productLayout": "grid", "first": 12, "collection": null }
+      }
+    ],
+    "/product/[slug]": [
+      {
+        "id": "ProductDetails",
+        "data": {
+          "imageLayout": "main",
+          "showStickyBar": true,
+          "relatedProducts": []
+        }
+      },
+      { "id": "ProductDescription", "data": { "content": {} } },
+      { "id": "RelatedProducts", "data": {} },
+      { "id": "ReviewList", "data": {} }
+    ]
+  },
+  "settings": {
+    "storeName": "Minimalist Shoes",
+    "storeDescription": "Minimalist shoes designed for everyday comfort, style, and motion.",
+    "freeShippingThreshold": null,
+    "fontFamily": "merriweather",
+    "logo": { "imageUrl": "https://yns.app/icon.png", "width": 1024, "height": 1024 },
+    "ogimage": "https://yournextstore.com/opengraph-image.png",
+    "imageStyle": "Clean product shots on a pure white background with bright, natural lighting and centered composition.",
+    "chosenPaletteName": "MinimalistWarm"
+  },
+  "products": [
+    {
+      "name": "Everyday Sneaker",
+      "summary": "Comfortable and stylish for daily wear.",
+      "price": 89.99,
+      "imageUrl": "https://yns.img?description=A%20minimalist%2C%20low-top%20casual%20sneaker%20displayed%20in%20perfect%20profile%20against%20a%20plain%2C%20light%20gray%20or%20off-white%20studio%20background.%20The%20shoe%20is%20lavender%20in%20color%20with%20a%20smooth%2C%20tightly%20woven%20knit%20textile%20upper%20and%20a%20matte%20finish.%20It%20has%20a%20clean%2C%20seamless%20silhouette%20with%20no%20logos%20or%20decorative%20elements%2C%20emphasizing%20simplicity%20and%20modern%20design.%20The%20sneaker%20features%20black%20metal%20eyelets%20and%20matching%20lavender-colored%20laces%2C%20with%20a%20soft%2C%20slightly%20padded%20tongue%20integrated%20smoothly%20into%20the%20upper.%20The%20sole%20is%20thick%2C%20rounded%2C%20and%20made%20from%20smooth%20white%20rubber%20or%20EVA%2C%20curving%20gently%20at%20the%20toe%20and%20heel%20for%20a%20contemporary%2C%20ergonomic%20look.%20The%20shoe%20is%20the%20only%20object%20in%20the%20frame%2C%20centered%20horizontally%2C%20with%20soft%2C%20diffused%20lighting%20that%20casts%20a%20gentle%20shadow%20beneath%20it.%20The%20visual%20style%20is%20clean%2C%20calm%2C%20and%20modern%20%E2%80%94%20ideal%20for%20premium%20ecommerce%20display."
+    },
+    {
+      "name": "Motion Runner",
+      "summary": "Designed for active lifestyles.",
+      "price": 99.99,
+      "imageUrl": "https://yns.img?description=A%20sleek%2C%20lightweight%20running%20shoe%20in%20a%20neutral%20gray%20tone%2C%20displayed%20on%20a%20white%20background.%20The%20shoe%20features%20a%20breathable%20mesh%20upper%20with%20minimal%20seams%20and%20a%20flexible%20rubber%20sole%20for%20enhanced%20comfort%20and%20motion."
+    },
+    {
+      "name": "Casual Loafer",
+      "summary": "Effortless style for any occasion.",
+      "price": 79.99,
+      "imageUrl": "https://yns.img?description=A%20classic%20casual%20loafer%20in%20a%20soft%20tan%20leather%2C%20shown%20against%20a%20simple%20white%20background.%20The%20loafer%20has%20a%20smooth%20finish%20with%20a%20rounded%20toe%20and%20a%20low%20heel%2C%20perfect%20for%20everyday%20wear."
+    },
+    {
+      "name": "Urban Slip-On",
+      "summary": "Minimalist design for urban living.",
+      "price": 69.99,
+      "imageUrl": "https://yns.img?description=A%20modern%20slip-on%20shoe%20in%20a%20charcoal%20gray%20fabric%2C%20set%20against%20a%20clean%20white%20background.%20The%20shoe%20features%20a%20simple%20silhouette%20with%20elastic%20side%20panels%20for%20easy%20wear."
+    }
+  ]
+}
+```
+_(Your generated JSON should follow this structure, with all content made up for a different kind of store.)_
+
 ---
 
 ### User Prompt
