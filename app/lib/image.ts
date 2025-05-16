@@ -160,10 +160,10 @@ export async function replaceImagePlaceholders(
   imageMode: GenerationMode,
   imageStyle?: string | null,
 ): Promise<any> {
-  const startTime = Date.now();
+  const rootStartTime = Date.now(); // Establish the root start time here
   const logWithTime = (message: string) => {
-    const elapsed = Date.now() - startTime;
-    console.log(`[${elapsed}ms] ${message}`);
+    const elapsed = Date.now() - rootStartTime;
+    console.log(`[T+${elapsed}ms] ${message}`);
   };
 
   let totalPlaceholders = 0;
@@ -263,6 +263,7 @@ export async function replaceImagePlaceholders(
                       alignmentForGeneration, // This is 'left' | 'right' | 'center'
                       // imageStyle is not used for heroes based on prior discussion
                       null,
+                      rootStartTime, // Pass down rootStartTime
                     );
 
                     if (result?.blobUrl) {
@@ -436,6 +437,7 @@ export async function replaceImagePlaceholders(
         productPlaceholdersToGenerate,
         imageMode,
         imageStyle,
+        rootStartTime, // Pass down rootStartTime
       );
       logWithTime('Promise created, about to await');
       const generationResults = await generationPromise;

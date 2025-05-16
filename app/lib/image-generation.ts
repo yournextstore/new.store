@@ -191,6 +191,7 @@ interface ProcessedImageResult {
  * @param imageType The type of the image.
  * @param alignment The alignment of the image.
  * @param imageStyle The image style (general style for product images consistent with the store concept).
+ * @param rootStartTime Optional root start time for consistent logging
  * @returns A promise resolving to the ProcessedImageResult.
  */
 export async function processSinglePlaceholder(
@@ -199,11 +200,17 @@ export async function processSinglePlaceholder(
   imageType: 'product' | 'hero',
   alignment?: 'left' | 'right' | 'center' | null,
   imageStyle?: string | null,
+  rootStartTime?: number, // Added: root start time
 ): Promise<ProcessedImageResult> {
-  const startTime = Date.now();
+  const operationStartTime = Date.now(); // Keep for individual operation timing
+  const getElapsedTime = () =>
+    rootStartTime
+      ? Date.now() - rootStartTime
+      : Date.now() - operationStartTime;
+
   const logWithTime = (message: string) => {
-    const elapsed = Date.now() - startTime;
-    console.log(`[${elapsed}ms] [Single] ${message}`);
+    const elapsed = getElapsedTime();
+    console.log(`[T+${elapsed}ms] [Single] ${message}`);
   };
 
   // Variables to hold intermediate results
@@ -413,17 +420,24 @@ export async function processSinglePlaceholder(
  * @param placeholders Array of image placeholder objects.
  * @param generationMode The selected image generation mode/API.
  * @param imageStyle The image style (general style for product images consistent with the store concept).
+ * @param rootStartTime Optional root start time for consistent logging
  * @returns A promise resolving to an array of processed image results.
  */
 export async function generateAndUploadPlaceholders(
   placeholders: ImagePlaceholder[],
   generationMode: GenerationMode,
   imageStyle?: string | null,
+  rootStartTime?: number, // Added: root start time
 ): Promise<Array<ProcessedImageResult>> {
-  const startTime = Date.now();
+  const operationStartTime = Date.now(); // Keep for individual operation timing
+  const getElapsedTime = () =>
+    rootStartTime
+      ? Date.now() - rootStartTime
+      : Date.now() - operationStartTime;
+
   const logWithTime = (message: string) => {
-    const elapsed = Date.now() - startTime;
-    console.log(`[${elapsed}ms] [Batch] ${message}`);
+    const elapsed = getElapsedTime();
+    console.log(`[T+${elapsed}ms] [Batch] ${message}`);
   };
 
   if (placeholders.length === 0) return [];
@@ -445,6 +459,7 @@ export async function generateAndUploadPlaceholders(
         'product',
         null,
         imageStyle,
+        rootStartTime, // Pass down rootStartTime
       );
     });
 
