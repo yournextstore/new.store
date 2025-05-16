@@ -160,6 +160,12 @@ export async function replaceImagePlaceholders(
   imageMode: GenerationMode,
   imageStyle?: string | null,
 ): Promise<any> {
+  const startTime = Date.now();
+  const logWithTime = (message: string) => {
+    const elapsed = Date.now() - startTime;
+    console.log(`[${elapsed}ms] ${message}`);
+  };
+
   let totalPlaceholders = 0;
   let successfulMatches = 0;
   // Separate counters for stats
@@ -171,7 +177,7 @@ export async function replaceImagePlaceholders(
     originalUrl: string;
     description: string;
     productRef: any;
-  }[] = []; // <<< ADDED
+  }[] = [];
 
   if (!pool) {
     console.warn('Database pool not available. Skipping image replacement.');
@@ -330,6 +336,7 @@ export async function replaceImagePlaceholders(
   }
 
   if (Array.isArray(json.products)) {
+    logWithTime('Starting product processing');
     const productProcessingPromises: Promise<void>[] = []; // Store promises for concurrent execution
 
     for (const product of json.products) {
@@ -366,6 +373,9 @@ export async function replaceImagePlaceholders(
                 productRef: product, // Keep reference to modify later
               });
               productGenerationAttempted++;
+              logWithTime(
+                `Added product to generation queue: ${description.substring(0, 50)}...`,
+              );
               // NOTE: We don't set fallback URL here yet. It's done after all generation calls.
             } else {
               // --- STOCK PATH (Existing DB Lookup) ---
@@ -401,26 +411,50 @@ export async function replaceImagePlaceholders(
       }
     }
     // Wait for all product stock lookups/parsing to complete
+    logWithTime('Waiting for all product processing promises to settle');
     await Promise.allSettled(productProcessingPromises);
+    logWithTime(
+      `Finished processing ${productPlaceholdersToGenerate.length} products for generation`,
+    );
 
     // --- Execute Generation Calls (if any) ---
     if (productPlaceholdersToGenerate.length > 0) {
-      // Call the refactored utility function, passing the imageMode, and imageStyle.
-      const generationResults = await generateAndUploadPlaceholders(
+      logWithTime(
+        `Starting batch generation of ${productPlaceholdersToGenerate.length} products`,
+      );
+
+      // Add Promise chain logging
+      logWithTime('About to call generateAndUploadPlaceholders');
+
+      // Force event loop to process any pending operations
+      await new Promise((resolve) => setImmediate(resolve));
+      logWithTime('Event loop processed before generation call');
+
+      // Add detailed logging around the await
+      logWithTime('Preparing to await generateAndUploadPlaceholders');
+      const generationPromise = generateAndUploadPlaceholders(
         productPlaceholdersToGenerate,
         imageMode,
         imageStyle,
       );
+      logWithTime('Promise created, about to await');
+      const generationResults = await generationPromise;
+      logWithTime(
+        'Promise resolved, received results from generateAndUploadPlaceholders',
+      );
 
       // Create a map for easy lookup of product references
+      logWithTime('Creating product reference map');
       const productRefMap = new Map(
         productPlaceholdersToGenerate.map((item) => [
           item.originalUrl,
           item.productRef,
         ]),
       );
+      logWithTime('Product reference map created');
 
       // Update the JSON with the results
+      logWithTime('Starting to update product URLs in JSON');
       for (const result of generationResults) {
         const productRef = productRefMap.get(result.originalUrl);
         if (productRef) {
@@ -431,8 +465,8 @@ export async function replaceImagePlaceholders(
             );
           } else {
             productGenerationSucceeded++;
-            console.log(
-              `[Generate Mode] Successfully processed image for ${result.originalUrl}. Final URL: ${result.blobUrl}`,
+            logWithTime(
+              `Updated product URL for ${result.originalUrl.substring(0, 50)}...`,
             );
           }
         } else {
@@ -442,12 +476,14 @@ export async function replaceImagePlaceholders(
           );
         }
       }
+      logWithTime('Finished updating product URLs in JSON');
     }
     // --- End Generation Calls ---
   }
 
   // Log overall statistics
   if (totalPlaceholders > 0) {
+    logWithTime('Starting to log statistics');
     console.log('--- Image Placeholder Stats ---');
     console.log(`Total Placeholders Found: ${totalPlaceholders}`);
 
@@ -480,9 +516,11 @@ export async function replaceImagePlaceholders(
       );
     }
     console.log('-----------------------------');
+    logWithTime('Finished logging statistics');
   } else {
     console.log('Image Placeholder Stats: No placeholders found to process.');
   }
 
+  logWithTime('Returning final JSON');
   return json;
 }

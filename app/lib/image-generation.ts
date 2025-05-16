@@ -200,6 +200,12 @@ export async function processSinglePlaceholder(
   alignment?: 'left' | 'right' | 'center' | null,
   imageStyle?: string | null,
 ): Promise<ProcessedImageResult> {
+  const startTime = Date.now();
+  const logWithTime = (message: string) => {
+    const elapsed = Date.now() - startTime;
+    console.log(`[${elapsed}ms] [Single] ${message}`);
+  };
+
   // Variables to hold intermediate results
   let externalImageUrl: string | null = null; // URL from GetImg/Fal
   let blobUrlFromOpenAI: string | null = null; // Direct Blob URL from OpenAI helper
@@ -219,9 +225,8 @@ export async function processSinglePlaceholder(
 
   try {
     // 1. Log Original Description & Construct Modified Prompt
-    console.log(
-      `[Image Gen Util - ${generationMode}] Original description:`,
-      placeholder.description,
+    logWithTime(
+      `Starting processing for description: ${placeholder.description.substring(0, 50)}...`,
     );
 
     let modifiedPrompt = '';
@@ -268,7 +273,7 @@ export async function processSinglePlaceholder(
     );
 
     // 2. Call the selected Generation API
-    console.log(`[Image Gen Util - ${generationMode}] Calling API...`);
+    logWithTime(`Calling ${generationMode} API...`);
     switch (generationMode) {
       case 'getimg.ai':
         externalImageUrl = await callGetImgApi(modifiedPrompt);
@@ -277,10 +282,9 @@ export async function processSinglePlaceholder(
         externalImageUrl = await callFalAiTextToImage(modifiedPrompt);
         break;
       case 'openai-gpt-image-1':
-        // OpenAI helper returns object with blobUrl and hash
         openAiResult = await callOpenAiTextToImage(modifiedPrompt);
-        blobUrlFromOpenAI = openAiResult?.blobUrl ?? null; // Extract URL for check
-        imageHash = openAiResult?.hash ?? null; // Extract hash directly
+        blobUrlFromOpenAI = openAiResult?.blobUrl ?? null;
+        imageHash = openAiResult?.hash ?? null;
         break;
       default:
         console.error(
@@ -288,6 +292,7 @@ export async function processSinglePlaceholder(
         );
         throw new Error(`Unknown generation mode: ${generationMode}`);
     }
+    logWithTime(`API call completed`);
 
     // Check if API call failed
     if (!externalImageUrl && !blobUrlFromOpenAI) {
@@ -392,14 +397,12 @@ export async function processSinglePlaceholder(
     }
 
     // If all steps succeeded
+    logWithTime(`Successfully completed all processing steps`);
     return { originalUrl: placeholder.originalUrl, blobUrl: finalBlobUrl };
   } catch (error) {
-    // Log the specific error that caused the failure
-    console.error(
-      `[Image Gen Util - ${generationMode}] Failed processing placeholder ${placeholder.originalUrl}:`,
-      error instanceof Error ? error.message : error,
+    logWithTime(
+      `Failed processing: ${error instanceof Error ? error.message : error}`,
     );
-    // TODO: Consider cleanup? e.g., delete blob if DB insert failed? For now, leave it.
     return { originalUrl: placeholder.originalUrl, blobUrl: null };
   }
 }
@@ -417,45 +420,82 @@ export async function generateAndUploadPlaceholders(
   generationMode: GenerationMode,
   imageStyle?: string | null,
 ): Promise<Array<ProcessedImageResult>> {
+  const startTime = Date.now();
+  const logWithTime = (message: string) => {
+    const elapsed = Date.now() - startTime;
+    console.log(`[${elapsed}ms] [Batch] ${message}`);
+  };
+
   if (placeholders.length === 0) return [];
 
-  console.log(
-    `[Image Gen Util] Starting generation (${generationMode}), upload & persistence for ${placeholders.length} images...`,
+  logWithTime(
+    `Starting generation (${generationMode}), upload & persistence for ${placeholders.length} images...`,
   );
 
-  // Process placeholders concurrently
-  const processingPromises = placeholders.map((p) =>
-    processSinglePlaceholder(p, generationMode, 'product', null, imageStyle),
-  );
+  try {
+    // Process placeholders concurrently
+    logWithTime('Creating processing promises for all placeholders');
+    const processingPromises = placeholders.map((p, index) => {
+      logWithTime(
+        `Creating promise for placeholder ${index + 1}/${placeholders.length}`,
+      );
+      return processSinglePlaceholder(
+        p,
+        generationMode,
+        'product',
+        null,
+        imageStyle,
+      );
+    });
 
-  // Wait for all operations to settle
-  const results = await Promise.allSettled(processingPromises);
+    // Wait for all operations to settle
+    logWithTime('Waiting for all processing promises to settle');
+    const results = await Promise.allSettled(processingPromises);
+    logWithTime('All processing promises have settled');
 
-  // Process settled results
-  const finalResults: Array<ProcessedImageResult> = [];
-  let successfulOps = 0;
-  let failedOps = 0;
+    // Process settled results
+    logWithTime('Starting to process settled results');
+    const finalResults: Array<ProcessedImageResult> = [];
+    let successfulOps = 0;
+    let failedOps = 0;
 
-  results.forEach((result, index) => {
-    if (result.status === 'fulfilled' && result.value.blobUrl) {
-      finalResults.push(result.value);
-      successfulOps++;
-    } else {
-      // Either rejected promise or fulfilled with blobUrl: null
-      const originalUrl = placeholders[index]?.originalUrl || 'unknown';
-      finalResults.push({ originalUrl: originalUrl, blobUrl: null });
-      failedOps++;
-      if (result.status === 'rejected') {
-        console.error(
-          `[Image Gen Util] Unexpected rejection for placeholder ${originalUrl}:`,
-          result.reason,
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled' && result.value.blobUrl) {
+        finalResults.push(result.value);
+        successfulOps++;
+        logWithTime(
+          `Successfully processed placeholder ${index + 1}/${placeholders.length}`,
         );
+      } else {
+        // Either rejected promise or fulfilled with blobUrl: null
+        const originalUrl = placeholders[index]?.originalUrl || 'unknown';
+        finalResults.push({ originalUrl: originalUrl, blobUrl: null });
+        failedOps++;
+        logWithTime(
+          `Failed to process placeholder ${index + 1}/${placeholders.length}`,
+        );
+        if (result.status === 'rejected') {
+          console.error(
+            `[Image Gen Util] Unexpected rejection for placeholder ${originalUrl}:`,
+            result.reason,
+          );
+        }
       }
-    }
-  });
+    });
 
-  console.log(
-    `[Image Gen Util] Processing finished. Success: ${successfulOps}, Failed: ${failedOps}`,
-  );
-  return finalResults;
+    logWithTime(
+      `Processing finished. Success: ${successfulOps}, Failed: ${failedOps}`,
+    );
+    logWithTime('About to return final results array');
+
+    // Force microtask queue to flush
+    await Promise.resolve();
+    logWithTime('Microtask queue flushed');
+
+    // Return results directly without any additional Promise wrapping
+    return finalResults;
+  } catch (error) {
+    logWithTime(`Error in generateAndUploadPlaceholders: ${error}`);
+    throw error;
+  }
 }
