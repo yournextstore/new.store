@@ -146,10 +146,24 @@ async function findImageInDB(
   return bestMatchUrl;
 }
 
+// --- Types for Unified Image Processing ---
+interface ImageOperation {
+  targetObject: any; // The JSON object to update (e.g., slide.image or product)
+  targetKey: string; // The key for the image URL (e.g., 'src' or 'imageUrl')
+  description: string;
+  imageType: 'hero' | 'product';
+  // Hero-specific
+  alignmentForDbLookup?: 'left' | 'right';
+  alignmentForGeneration?: 'left' | 'right' | 'center';
+  // Generation-specific
+  originalUrl?: string; // Placeholder URL for generation context
+}
+// --- End Types ---
+
 /**
  * Recursively traverses a JSON object/array and replaces image placeholder URLs
  * (matching `https://yns.img?description=...`) with URLs found via DB similarity search or generation.
- * Handles different image types (product, hero) and alignment requirements.
+ * Handles different image types (product, hero) and alignment requirements concurrently.
  * @param json The JSON data (or sub-part) to process.
  * @param imageMode Determines the source for PRODUCT images ('stock' or a generation API identifier).
  * @param imageStyle The image style (general style for product images consistent with the store concept).
@@ -166,146 +180,75 @@ export async function replaceImagePlaceholders(
     console.log(`[T+${elapsed}ms] ${message}`);
   };
 
-  let totalPlaceholders = 0;
-  let successfulMatches = 0;
-  // Separate counters for stats
-  let heroGenerationAttempted = 0;
-  let heroGenerationSucceeded = 0;
-  let productGenerationAttempted = 0;
-  let productGenerationSucceeded = 0;
-  const productPlaceholdersToGenerate: {
-    originalUrl: string;
-    description: string;
-    productRef: any;
-  }[] = [];
-
   if (!pool) {
     console.warn('Database pool not available. Skipping image replacement.');
     return json;
   }
+  if (!json || typeof json !== 'object') return json;
 
-  if (!json || typeof json !== 'object') return json; // Basic type check
+  const imageOperations: ImageOperation[] = [];
+  let totalPlaceholders = 0;
+  let successfulMatches = 0; // Primarily for stock mode successes or successful fallbacks from generation
+  let heroGenerationAttempted = 0;
+  let heroGenerationSucceeded = 0;
+  let productGenerationAttempted = 0;
+  let productGenerationSucceeded = 0;
 
+  // --- Collect Hero Image Operations ---
   if (json.paths && typeof json.paths === 'object') {
     for (const pathKey in json.paths) {
       if (Array.isArray(json.paths[pathKey])) {
         for (const section of json.paths[pathKey]) {
-          // --- HERO SECTION PROCESSING ---
           if (section && section.id === 'HeroSection') {
-            const processSlide = async (slide: any) => {
+            const collectHeroOps = (slide: any) => {
               if (
                 !slide?.image ||
                 typeof slide.image.src !== 'string' ||
                 !slide.image.src.startsWith('https://yns.img?description=')
               ) {
-                return; // Skip if not a valid placeholder
+                return;
               }
 
               const placeholderUrl = slide.image.src;
-
-              let alignmentForDbLookup: 'left' | 'right' | undefined =
-                undefined; // For findImageInDB
-              let alignmentForGeneration: 'left' | 'right' | 'center' = 'left'; // For processSinglePlaceholder
-
-              const rawAlignment = slide.data?.boxAlignment?.toLowerCase();
-              if (rawAlignment === 'right') {
-                alignmentForDbLookup = 'right';
-                alignmentForGeneration = 'right';
-              } else if (rawAlignment === 'left') {
-                alignmentForDbLookup = 'left';
-                alignmentForGeneration = 'left';
-              } else if (rawAlignment === 'center') {
-                // findImageInDB doesn't support 'center', so lookup is undefined
-                // generation prompt *will* use 'center'
-                alignmentForGeneration = 'center';
-              }
-
               try {
                 const url = new URL(placeholderUrl);
                 const description = url.searchParams.get('description');
-
-                if (description) {
-                  totalPlaceholders++; // Count all valid placeholders
-
-                  if (imageMode === 'stock') {
-                    // --- STOCK MODE (Existing DB Lookup for Heroes) ---
-                    console.log(
-                      `[Stock Mode] Hero Image Request: Align "${alignmentForGeneration}", Desc: "${description.substring(0, 50)}..."`,
-                    );
-                    const stockMatchUrl = await findImageInDB(
-                      description,
-                      'hero',
-                      alignmentForDbLookup,
-                    );
-                    if (stockMatchUrl) {
-                      slide.image.src = stockMatchUrl;
-                      successfulMatches++;
-                      console.log(
-                        `[Stock Mode] Hero Image Match: Replaced placeholder for alignment "${alignmentForGeneration}" with ${stockMatchUrl}`,
-                      );
-                    } else {
-                      slide.image.src = FALLBACK_IMAGE_URL;
-                      console.warn(
-                        `[Stock Mode] Hero Fallback (Stock): No DB match for alignment "${alignmentForGeneration}". Using fallback.`,
-                      );
-                    }
-                  } else {
-                    // --- GENERATE MODE for Heroes ---
-                    heroGenerationAttempted++;
-                    console.log(
-                      `[Generate Mode - ${imageMode}] Hero Image Request: Align "${alignmentForGeneration}", Desc: "${description.substring(0, 50)}..."`,
-                    );
-                    // Call processSinglePlaceholder directly for hero images
-                    const result = await processSinglePlaceholder(
-                      { originalUrl: placeholderUrl, description },
-                      imageMode, // Pass the selected generationMode
-                      'hero',
-                      alignmentForGeneration, // This is 'left' | 'right' | 'center'
-                      // imageStyle is not used for heroes based on prior discussion
-                      null,
-                      rootStartTime, // Pass down rootStartTime
-                    );
-
-                    if (result?.blobUrl) {
-                      slide.image.src = result.blobUrl;
-                      heroGenerationSucceeded++;
-                      console.log(
-                        `[Generate Mode - ${imageMode}] Hero Image Success: Replaced placeholder for alignment "${alignmentForGeneration}" with ${result.blobUrl}`,
-                      );
-                    } else {
-                      console.warn(
-                        `[Generate Mode - ${imageMode}] Hero Generation Failed for alignment "${alignmentForGeneration}". Attempting stock fallback.`,
-                      );
-                      // Fallback to stock image search
-                      const stockFallbackUrl = await findImageInDB(
-                        description,
-                        'hero',
-                        alignmentForDbLookup,
-                      );
-                      if (stockFallbackUrl) {
-                        slide.image.src = stockFallbackUrl;
-                        // Note: generationAttempted was already incremented. We don't count this as a generationSucceeded.
-                        console.log(
-                          `[Generate Mode - ${imageMode}] Hero Stock Fallback Success: Used ${stockFallbackUrl}`,
-                        );
-                      } else {
-                        slide.image.src = FALLBACK_IMAGE_URL;
-                        console.warn(
-                          `[Generate Mode - ${imageMode}] Hero Stock Fallback Failed for alignment "${alignmentForGeneration}". Using final fallback URL.`,
-                        );
-                      }
-                    }
-                  }
-                } else {
+                if (!description) {
                   console.warn(
                     'Hero Placeholder URL missing description:',
                     placeholderUrl,
                   );
-                  slide.image.src = FALLBACK_IMAGE_URL;
+                  slide.image.src = FALLBACK_IMAGE_URL; // Set fallback immediately if no description
+                  return;
                 }
+
+                let alignmentForDbLookup: 'left' | 'right' | undefined =
+                  undefined;
+                let alignmentForGeneration: 'left' | 'right' | 'center' =
+                  'left';
+                const rawAlignment = slide.data?.boxAlignment?.toLowerCase();
+                if (rawAlignment === 'right') {
+                  alignmentForDbLookup = 'right';
+                  alignmentForGeneration = 'right';
+                } else if (rawAlignment === 'left') {
+                  alignmentForDbLookup = 'left';
+                  alignmentForGeneration = 'left';
+                } else if (rawAlignment === 'center') {
+                  alignmentForGeneration = 'center';
+                }
+
+                imageOperations.push({
+                  targetObject: slide.image,
+                  targetKey: 'src',
+                  description,
+                  imageType: 'hero',
+                  alignmentForDbLookup,
+                  alignmentForGeneration,
+                  originalUrl: placeholderUrl,
+                });
               } catch (error) {
                 console.error(
-                  'Error processing Hero Section placeholder:',
+                  'Error preparing Hero Section placeholder for processing:',
                   placeholderUrl,
                   error,
                 );
@@ -313,33 +256,20 @@ export async function replaceImagePlaceholders(
               }
             };
 
-            // Handle single or multi-slide structure
             if (Array.isArray(section.data?.slides)) {
-              const slidePromises = section.data.slides.map(processSlide);
-              await Promise.allSettled(slidePromises); // Process slides concurrently
+              section.data.slides.forEach(collectHeroOps);
             } else if (section.data?.image) {
-              console.log(
-                `Processing HeroSection (Single-slide) in path: ${pathKey}`,
-              );
-              await processSlide(section.data);
-            } else {
-              console.warn(
-                'HeroSection structure mismatch (expected slides array or image object):',
-                section.data,
-              );
+              collectHeroOps(section.data);
             }
           }
           // --- OTHER SECTION PROCESSING (e.g., FeatureSection - future) ---
-          // else if (section && section.id === 'FeatureSection') { ... }
         }
       }
     }
   }
 
+  // --- Collect Product Image Operations ---
   if (Array.isArray(json.products)) {
-    logWithTime('Starting product processing');
-    const productProcessingPromises: Promise<void>[] = []; // Store promises for concurrent execution
-
     for (const product of json.products) {
       if (
         product &&
@@ -347,155 +277,171 @@ export async function replaceImagePlaceholders(
         product.imageUrl.startsWith('https://yns.img?description=')
       ) {
         const placeholderUrl = product.imageUrl;
-        totalPlaceholders++; // Count all valid placeholders
-
-        // Wrap processing in an async function for Promise.allSettled
-        const processProduct = async () => {
-          try {
-            const url = new URL(placeholderUrl);
-            const description = url.searchParams.get('description');
-
-            if (!description) {
-              console.warn(
-                'Product Placeholder URL missing description:',
-                placeholderUrl,
-              );
-              product.imageUrl = FALLBACK_IMAGE_URL;
-              return; // Stop processing this product
-            }
-
-            // --- Conditional Image Handling ---
-            if (imageMode !== 'stock') {
-              // --- GENERATE PATH ---
-              // Add to list for batch processing later
-              productPlaceholdersToGenerate.push({
-                originalUrl: placeholderUrl,
-                description: description,
-                productRef: product, // Keep reference to modify later
-              });
-              productGenerationAttempted++;
-              logWithTime(
-                `Added product to generation queue: ${description.substring(0, 50)}...`,
-              );
-              // NOTE: We don't set fallback URL here yet. It's done after all generation calls.
-            } else {
-              // --- STOCK PATH (Existing DB Lookup) ---
-              console.log(
-                `[Stock Mode] Product Image Request: "${description.substring(0, 70)}..."`,
-              );
-              const bestMatchUrl = await findImageInDB(description, 'product'); // Find in DB
-
-              if (bestMatchUrl) {
-                product.imageUrl = bestMatchUrl;
-                successfulMatches++; // Increment for successful DB match
-                console.log(
-                  `[Stock Mode] Product Image Match: Replaced placeholder for "${product.name || 'Unknown'}" with ${bestMatchUrl}`,
-                );
-              } else {
-                product.imageUrl = FALLBACK_IMAGE_URL;
-                console.warn(
-                  `[Stock Mode] Product Fallback: No DB match for "${product.name || 'Unknown'}" (Desc: "${description.substring(0, 70)}..."). Using fallback.`,
-                );
-              }
-            }
-            // --- End Conditional Image Handling ---
-          } catch (error) {
-            console.error(
-              'Error processing Product placeholder:',
-              placeholderUrl,
-              error,
-            );
-            product.imageUrl = FALLBACK_IMAGE_URL; // Set fallback on error during processing
-          }
-        };
-        productProcessingPromises.push(processProduct());
-      }
-    }
-    // Wait for all product stock lookups/parsing to complete
-    logWithTime('Waiting for all product processing promises to settle');
-    await Promise.allSettled(productProcessingPromises);
-    logWithTime(
-      `Finished processing ${productPlaceholdersToGenerate.length} products for generation`,
-    );
-
-    // --- Execute Generation Calls (if any) ---
-    if (productPlaceholdersToGenerate.length > 0) {
-      logWithTime(
-        `Starting batch generation of ${productPlaceholdersToGenerate.length} products`,
-      );
-
-      // Add Promise chain logging
-      logWithTime('About to call generateAndUploadPlaceholders');
-
-      // Force event loop to process any pending operations
-      await new Promise((resolve) => setImmediate(resolve));
-      logWithTime('Event loop processed before generation call');
-
-      // Add detailed logging around the await
-      logWithTime('Preparing to await generateAndUploadPlaceholders');
-      const generationPromise = generateAndUploadPlaceholders(
-        productPlaceholdersToGenerate,
-        imageMode,
-        imageStyle,
-        rootStartTime, // Pass down rootStartTime
-      );
-      logWithTime('Promise created, about to await');
-      const generationResults = await generationPromise;
-      logWithTime(
-        'Promise resolved, received results from generateAndUploadPlaceholders',
-      );
-
-      // Create a map for easy lookup of product references
-      logWithTime('Creating product reference map');
-      const productRefMap = new Map(
-        productPlaceholdersToGenerate.map((item) => [
-          item.originalUrl,
-          item.productRef,
-        ]),
-      );
-      logWithTime('Product reference map created');
-
-      // Update the JSON with the results
-      logWithTime('Starting to update product URLs in JSON');
-      for (const result of generationResults) {
-        const productRef = productRefMap.get(result.originalUrl);
-        if (productRef) {
-          productRef.imageUrl = result.blobUrl ?? FALLBACK_IMAGE_URL; // Use Blob URL or fallback
-          if (!result.blobUrl) {
+        try {
+          const url = new URL(placeholderUrl);
+          const description = url.searchParams.get('description');
+          if (!description) {
             console.warn(
-              `[Generate Mode] Failed to generate/upload image for placeholder ${result.originalUrl}. Using fallback.`,
+              'Product Placeholder URL missing description:',
+              placeholderUrl,
             );
-          } else {
-            productGenerationSucceeded++;
-            logWithTime(
-              `Updated product URL for ${result.originalUrl.substring(0, 50)}...`,
-            );
+            product.imageUrl = FALLBACK_IMAGE_URL; // Set fallback immediately
+            continue;
           }
-        } else {
-          // This shouldn't happen if the map is built correctly
+          imageOperations.push({
+            targetObject: product,
+            targetKey: 'imageUrl',
+            description,
+            imageType: 'product',
+            originalUrl: placeholderUrl,
+          });
+        } catch (error) {
           console.error(
-            `[Generate Mode] Could not find product reference for original URL: ${result.originalUrl}`,
+            'Error preparing Product placeholder for processing:',
+            placeholderUrl,
+            error,
           );
+          product.imageUrl = FALLBACK_IMAGE_URL;
         }
       }
-      logWithTime('Finished updating product URLs in JSON');
     }
-    // --- End Generation Calls ---
   }
 
-  // Log overall statistics
+  if (imageOperations.length === 0) {
+    logWithTime('No image placeholders found to process.');
+    return json;
+  }
+
+  logWithTime(
+    `Collected ${imageOperations.length} image operations. Starting processing...`,
+  );
+
+  // --- Process All Image Operations Concurrently ---
+  const processingPromises = imageOperations.map(async (operation) => {
+    totalPlaceholders++;
+    const {
+      targetObject,
+      targetKey,
+      description,
+      imageType,
+      alignmentForDbLookup,
+      alignmentForGeneration,
+      originalUrl,
+    } = operation;
+
+    try {
+      if (imageMode === 'stock') {
+        // --- STOCK MODE ---
+        logWithTime(
+          `[Stock Mode] ${imageType} Image Request: Align "${alignmentForGeneration ?? 'N/A'}", Desc: "${description.substring(0, 50)}..."`,
+        );
+        const stockMatchUrl = await findImageInDB(
+          description,
+          imageType,
+          alignmentForDbLookup, // This is 'left' | 'right' | undefined
+        );
+        if (stockMatchUrl) {
+          targetObject[targetKey] = stockMatchUrl;
+          successfulMatches++;
+          logWithTime(
+            `[Stock Mode] ${imageType} Image Match: Replaced for "${description.substring(0, 30)}..." with ${stockMatchUrl}`,
+          );
+        } else {
+          targetObject[targetKey] = FALLBACK_IMAGE_URL;
+          logWithTime(
+            `[Stock Mode] ${imageType} Fallback (Stock): No DB match for "${description.substring(0, 30)}...". Using fallback.`,
+          );
+        }
+      } else {
+        // --- GENERATE MODE ---
+        if (imageType === 'hero') heroGenerationAttempted++;
+        else productGenerationAttempted++;
+
+        logWithTime(
+          `[Generate Mode - ${imageMode}] ${imageType} Image Request: Align "${alignmentForGeneration ?? 'N/A'}", Desc: "${description.substring(0, 50)}..."`,
+        );
+
+        if (!originalUrl) {
+          // This should ideally not happen for generation mode if collection phase is correct
+          console.error(
+            `[Generate Mode - ${imageMode}] CRITICAL: originalUrl is missing for ${imageType} (Desc: "${description.substring(0, 50)}..."). Using fallback for targetObject.`,
+          );
+          targetObject[targetKey] = FALLBACK_IMAGE_URL;
+          // Skip processSinglePlaceholder call as it requires originalUrl
+        } else {
+          const generationResult = await processSinglePlaceholder(
+            { originalUrl: originalUrl, description }, // originalUrl is now guaranteed by the check above
+            imageMode,
+            imageType,
+            alignmentForGeneration, // This is 'left' | 'right' | 'center' for heroes
+            imageType === 'product' ? imageStyle : null, // imageStyle only for products
+            rootStartTime,
+          );
+
+          if (generationResult?.blobUrl) {
+            targetObject[targetKey] = generationResult.blobUrl;
+            if (imageType === 'hero') heroGenerationSucceeded++;
+            else productGenerationSucceeded++;
+            logWithTime(
+              `[Generate Mode - ${imageMode}] ${imageType} Image Success: Replaced for "${description.substring(0, 30)}..." with ${generationResult.blobUrl}`,
+            );
+          } else {
+            // Generation failed
+            logWithTime(
+              `[Generate Mode - ${imageMode}] ${imageType} Generation Failed for "${description.substring(0, 30)}...". Attempting stock fallback if hero.`,
+            );
+            if (imageType === 'hero') {
+              const stockFallbackUrl = await findImageInDB(
+                description,
+                'hero',
+                alignmentForDbLookup,
+              );
+              if (stockFallbackUrl) {
+                targetObject[targetKey] = stockFallbackUrl;
+                // successfulMatches++; // Optionally count this as a "successful recovery"
+                logWithTime(
+                  `[Generate Mode - ${imageMode}] Hero Stock Fallback Success: Used ${stockFallbackUrl}`,
+                );
+              } else {
+                targetObject[targetKey] = FALLBACK_IMAGE_URL;
+                logWithTime(
+                  `[Generate Mode - ${imageMode}] Hero Stock Fallback Failed. Using final fallback URL.`,
+                );
+              }
+            } else {
+              // Product generation failed, no further fallback
+              targetObject[targetKey] = FALLBACK_IMAGE_URL;
+              logWithTime(
+                `[Generate Mode - ${imageMode}] Product using fallback URL after generation failure.`,
+              );
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error(
+        `Error processing ${imageType} placeholder (Desc: "${description.substring(0, 50)}...") :`,
+        error,
+      );
+      targetObject[targetKey] = FALLBACK_IMAGE_URL;
+    }
+  });
+
+  await Promise.allSettled(processingPromises);
+  logWithTime(
+    `Finished processing all ${imageOperations.length} image operations.`,
+  );
+
+  // --- Log Statistics ---
   if (totalPlaceholders > 0) {
-    logWithTime('Starting to log statistics');
-    console.log('--- Image Placeholder Stats ---');
-    console.log(`Total Placeholders Found: ${totalPlaceholders}`);
+    logWithTime('--- Image Placeholder Stats ---');
+    console.log(`Total Placeholders Processed: ${totalPlaceholders}`);
 
-    const totalGenerationAttempted =
-      heroGenerationAttempted + productGenerationAttempted;
-
-    if (totalGenerationAttempted > 0) {
-      const dbLookupsAttempted = totalPlaceholders - totalGenerationAttempted;
+    if (imageMode !== 'stock') {
+      // More detailed stats for generation mode
+      const stockLookupsForGenerationFallbacks = successfulMatches; // Assuming successfulMatches is only incremented on stock success
       console.log(
-        `  DB Lookups (Stock/Fallback): Attempted=${dbLookupsAttempted}, Matched=${successfulMatches}`,
+        `  Stock DB Lookups (Actual in Stock Mode, or Fallbacks in Gen Mode): Matched=${stockLookupsForGenerationFallbacks}`,
       );
       if (heroGenerationAttempted > 0) {
         console.log(
@@ -507,20 +453,33 @@ export async function replaceImagePlaceholders(
           `  Generation (Product):   Attempted=${productGenerationAttempted}, Succeeded=${productGenerationSucceeded}`,
         );
       }
+      const totalGeneratedSuccessfully =
+        heroGenerationSucceeded + productGenerationSucceeded;
+      const totalAttemptedGeneration =
+        heroGenerationAttempted + productGenerationAttempted;
+      if (totalAttemptedGeneration > 0) {
+        const generationSuccessRate = (
+          (totalGeneratedSuccessfully / totalAttemptedGeneration) *
+          100
+        ).toFixed(2);
+        console.log(
+          `  Overall Generation Success Rate: ${generationSuccessRate}% (${totalGeneratedSuccessfully}/${totalAttemptedGeneration})`,
+        );
+      }
     } else {
-      // Log simpler stats for stock mode
-      const successRate = (
-        (successfulMatches / totalPlaceholders) *
-        100
-      ).toFixed(2);
+      // Simpler stats for pure stock mode
+      const successRate =
+        successfulMatches > 0 && totalPlaceholders > 0
+          ? ((successfulMatches / totalPlaceholders) * 100).toFixed(2)
+          : '0.00';
       console.log(
-        `  DB Lookups: Matched=${successfulMatches} / ${totalPlaceholders} (${successRate}%)`,
+        `  DB Lookups (Stock Mode): Matched=${successfulMatches} / ${totalPlaceholders} (${successRate}%)`,
       );
     }
     console.log('-----------------------------');
-    logWithTime('Finished logging statistics');
   } else {
-    console.log('Image Placeholder Stats: No placeholders found to process.');
+    // This case is handled earlier, but kept for safety, though logWithTime might not be defined if no ops.
+    // console.log('Image Placeholder Stats: No placeholders found to process.');
   }
 
   logWithTime('Returning final JSON');
