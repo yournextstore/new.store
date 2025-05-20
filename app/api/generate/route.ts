@@ -1,12 +1,11 @@
 import { NextResponse } from 'next/server';
 import { generateText, type LanguageModel } from 'ai';
 import { heliconeOpenAI, heliconeGoogle } from '../../lib/ai-providers';
-import { trace, SpanStatusCode } from '@opentelemetry/api';
-import type { Span } from '@opentelemetry/api'; // Span used as type
+import { trace, SpanStatusCode, type Span } from '@opentelemetry/api'; // Span used as type
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import util from 'node:util';
-import type { PoolClient } from 'pg'; // Import PoolClient for typing
+import type { Pool, PoolClient } from 'pg'; // Import PoolClient and Pool for typing
 import type { GenerationMode } from '../../lib/image-generation';
 import { applyTheme } from '../../lib/theme';
 import { replaceImagePlaceholders } from '../../lib/image';
@@ -18,6 +17,110 @@ import type { HeliconeRequestContext } from '../../lib/request-context';
 import { nanoid } from 'nanoid';
 
 const tracer = trace.getTracer('ai-generate-route-tracer');
+
+interface HandleGenerationErrorParams {
+  error: any;
+  span: Span;
+  jobId?: string; // Will only attempt DB update if this is provided and valid
+  dbPool: Pool; // Main DB pool instance, passed to the function
+  responseDetails: {
+    clientMessage: string; // For user-facing error property in NextResponse
+    statusCode: number;
+    dbErrorMessage?: string; // Specific message for generation_jobs.error_msg, defaults to error.message
+    errorDetails?: string; // For user-facing details property, defaults to error.message
+    rawResponse?: string; // Optional raw response for debugging in client response
+  };
+  operationContext: string; // For logging, e.g., "Validating clientJobId"
+}
+
+async function handleGenerationError({
+  error,
+  span,
+  jobId,
+  dbPool,
+  responseDetails,
+  operationContext,
+}: HandleGenerationErrorParams): Promise<NextResponse> {
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  const errorStack = error instanceof Error ? error.stack : undefined;
+
+  console.error(
+    `Error during ${operationContext}: ${errorMessage}`,
+    errorStack ? `\nStack: ${errorStack}` : '',
+    responseDetails.rawResponse
+      ? `\nRaw Response: ${responseDetails.rawResponse}`
+      : '',
+  );
+
+  span.recordException(
+    error instanceof Error ? error : new Error(errorMessage),
+  );
+  span.setStatus({
+    code: SpanStatusCode.ERROR,
+    message: `Error during ${operationContext}: ${errorMessage.substring(0, 256)}`, // Truncate for span message
+  });
+
+  if (jobId && typeof jobId === 'string') {
+    let dbClientForUpdate: PoolClient | null = null;
+    try {
+      dbClientForUpdate = await dbPool.connect();
+      const dbErrorMsgToStore = (
+        responseDetails.dbErrorMessage || errorMessage
+      ).substring(0, 1000);
+      await dbClientForUpdate.query(
+        `UPDATE generation_jobs SET status = 'failed', error_msg = $1, updated_at = NOW()
+         WHERE id = $2`,
+        [dbErrorMsgToStore, jobId],
+      );
+      console.log(
+        `Job ${jobId} status updated to 'failed' in DB due to error in ${operationContext}.`,
+      );
+    } catch (dbUpdateError) {
+      const dbUpdateErrorMessage =
+        dbUpdateError instanceof Error
+          ? dbUpdateError.message
+          : String(dbUpdateError);
+      console.error(
+        `CRITICAL: Failed to update job ${jobId} status to 'failed' in DB after error in ${operationContext}: ${dbUpdateErrorMessage}`,
+      );
+      // Record this critical failure too
+      span.recordException(
+        dbUpdateError instanceof Error
+          ? dbUpdateError
+          : new Error(dbUpdateErrorMessage),
+      );
+      span.setAttribute('db.update.job.failed_status.error', true);
+    } finally {
+      dbClientForUpdate?.release();
+    }
+  } else if (jobId) {
+    // Log if jobId was provided but invalid type, or if logic intends to skip DB update
+    console.warn(
+      `Invalid jobId ('${jobId}') or scenario to skip DB update for ${operationContext}, skipping DB update for job status.`,
+    );
+  } else {
+    console.warn(
+      `No jobId provided for ${operationContext}, skipping DB update for job status.`,
+    );
+  }
+
+  const responseBody: {
+    error: string;
+    details?: string;
+    rawResponse?: string;
+  } = {
+    error: responseDetails.clientMessage,
+    details: responseDetails.errorDetails || errorMessage,
+  };
+
+  if (responseDetails.rawResponse) {
+    responseBody.rawResponse = responseDetails.rawResponse;
+  }
+
+  return NextResponse.json(responseBody, {
+    status: responseDetails.statusCode,
+  });
+}
 
 /**
  * Injects a default theme (global and section-specific colors) into the AI-generated JSON.
@@ -104,6 +207,7 @@ export async function POST(req: Request) {
   let imageReplacementTimeMs: number | null = null;
   let ynsApiCallTimeMs: number | null = null;
   let databaseSaveTimeMs: number | string = 'Skipped';
+  let clientJobId: string | undefined = undefined; // Declare clientJobId here
 
   // --- Model Selection ---
   // Available models: 'gpt-4.1', 'gemini-2.5-flash'
@@ -142,20 +246,25 @@ export async function POST(req: Request) {
     console.log('userPrompt', userPrompt);
 
     const userId = body.userId;
-    const clientJobId = body.jobId; // Read client-generated jobId
+    clientJobId = body.jobId; // Assign clientJobId here
 
     // --- Validate clientJobId ---
     if (!clientJobId || typeof clientJobId !== 'string') {
       // Basic validation
-      rootSpan.setStatus({
-        code: SpanStatusCode.ERROR,
-        message: 'Client-generated jobId is required',
+      return handleGenerationError({
+        error: new Error(
+          'Client-generated jobId is required and must be a string',
+        ),
+        span: rootSpan,
+        // No jobId to update here, as it's missing/invalid
+        dbPool: pool,
+        responseDetails: {
+          clientMessage:
+            'Client-generated jobId is required and must be a string',
+          statusCode: 400,
+        },
+        operationContext: 'Validating clientJobId',
       });
-      // Note: Cannot update generation_jobs table here as jobId is missing/invalid.
-      return NextResponse.json(
-        { error: 'Client-generated jobId is required and must be a string' },
-        { status: 400 },
-      );
     }
     rootSpan.setAttribute('app.jobId', clientJobId); // Add jobId to root span
     console.log('clientJobId', clientJobId);
@@ -218,107 +327,75 @@ export async function POST(req: Request) {
         clientJobId,
       );
     } catch (dbError) {
-      console.error(
-        'Failed to insert initial job status into database:',
-        dbError,
-      );
-      if (dbError instanceof Error) {
-        rootSpan.recordException(dbError);
-        rootSpan.setStatus({
-          code: SpanStatusCode.ERROR,
-          message: `DB initial insert failed: ${dbError.message}`,
-        });
-      } else {
-        rootSpan.recordException(new Error(String(dbError)));
-        rootSpan.setStatus({
-          code: SpanStatusCode.ERROR,
-          message: 'DB initial insert failed: Unknown error',
-        });
-      }
-      // No need to update job to 'failed' here as it wasn't properly created or jobId might be the issue.
-      return NextResponse.json(
-        { error: 'Internal Server Error: Failed to initialize job tracking' },
-        { status: 500 },
-      );
+      // Job ID is known, but the job itself failed to initialize in DB.
+      // So, can't update status of a job that doesn't exist.
+      // handleGenerationError will attempt to log to span and console.
+      return handleGenerationError({
+        error: dbError,
+        span: rootSpan,
+        // No jobId to update in DB as insert failed
+        dbPool: pool,
+        responseDetails: {
+          clientMessage:
+            'Internal Server Error: Failed to initialize job tracking',
+          statusCode: 500,
+          dbErrorMessage:
+            dbError instanceof Error
+              ? `DB initial insert failed: ${dbError.message}`
+              : 'DB initial insert failed: Unknown error',
+        },
+        operationContext: 'Initializing job in database',
+      });
     } finally {
       dbClient?.release();
     }
     // --- End Initialize job in database ---
 
     if (!userPrompt || typeof userPrompt !== 'string') {
-      rootSpan.setStatus({
-        code: SpanStatusCode.ERROR,
-        message: 'Prompt is required',
+      return handleGenerationError({
+        error: new Error('Prompt is required and must be a string'),
+        span: rootSpan,
+        jobId: clientJobId,
+        dbPool: pool,
+        responseDetails: {
+          clientMessage: 'Prompt is required and must be a string',
+          statusCode: 400,
+          dbErrorMessage: 'Prompt is required and must be a string',
+        },
+        operationContext: 'Validating userPrompt',
       });
-      // Update job to failed before returning
-      if (clientJobId) {
-        try {
-          dbClient = await pool.connect();
-          await dbClient.query(
-            `UPDATE generation_jobs SET status = 'failed', error_msg = $1, updated_at = NOW()
-             WHERE id = $2`,
-            [
-              'Internal Server Error: Invalid prompt configuration',
-              clientJobId,
-            ],
-          );
-        } catch (dbUpdateError) {
-          console.error(
-            'Failed to update job status to failed in DB:',
-            dbUpdateError,
-          );
-        } finally {
-          dbClient?.release();
-        }
-      }
-      return NextResponse.json(
-        { error: 'Prompt is required and must be a string' },
-        { status: 400 },
-      );
     }
 
     if (!userId || typeof userId !== 'string') {
-      rootSpan.setStatus({
-        code: SpanStatusCode.ERROR,
-        message: 'User ID is required',
+      return handleGenerationError({
+        error: new Error('User ID is required and must be a string'),
+        span: rootSpan,
+        jobId: clientJobId, // Assuming we want to fail the job if userId is bad after job init
+        dbPool: pool,
+        responseDetails: {
+          clientMessage: 'User ID is required and must be a string',
+          statusCode: 400,
+          dbErrorMessage: 'User ID is required and must be a string',
+        },
+        operationContext: 'Validating userId',
       });
-      return NextResponse.json(
-        { error: 'User ID is required and must be a string' },
-        { status: 400 },
-      );
     }
 
     // Check that {user_prompt} is present in the prototypePrompt
     if (!prototypePrompt.includes('{user_prompt}')) {
-      // This shouldn't happen if the prompt file is correct
-      console.error(
-        'Critical Error: Prompt placeholder {user_prompt} not found in gen-store-json-prompt.md',
-      );
-      // Update job to failed before returning
-      if (clientJobId) {
-        try {
-          dbClient = await pool.connect();
-          await dbClient.query(
-            `UPDATE generation_jobs SET status = 'failed', error_msg = $1, updated_at = NOW()
-             WHERE id = $2`,
-            [
-              'Internal Server Error: Invalid prompt configuration',
-              clientJobId,
-            ],
-          );
-        } catch (dbUpdateError) {
-          console.error(
-            'Failed to update job status to failed in DB:',
-            dbUpdateError,
-          );
-        } finally {
-          dbClient?.release();
-        }
-      }
-      return NextResponse.json(
-        { error: 'Internal Server Error: Invalid prompt configuration' },
-        { status: 500 },
-      );
+      return handleGenerationError({
+        error: new Error('Prompt placeholder {user_prompt} not found'),
+        span: rootSpan,
+        jobId: clientJobId,
+        dbPool: pool,
+        responseDetails: {
+          clientMessage: 'Internal Server Error: Invalid prompt configuration',
+          statusCode: 500,
+          dbErrorMessage:
+            'Critical Error: Prompt placeholder {user_prompt} not found in gen-store-json-prompt.md',
+        },
+        operationContext: 'Validating prototypePrompt content',
+      });
     }
 
     // Construct the full prompt for the AI
@@ -425,10 +502,19 @@ export async function POST(req: Request) {
     } catch (parseError) {
       console.error('LLM Turn 1 JSON Parsing Error:', parseError);
       console.error('Raw AI Response (Turn 1):', heroContentText);
-      // For now, we'll throw to stop execution if Turn 1 fails, can be refined for job status 'failed' later
-      throw new Error(
-        `Failed to parse LLM Turn 1 response: ${(parseError as Error).message}`,
-      );
+      return handleGenerationError({
+        error: parseError,
+        span: rootSpan,
+        jobId: clientJobId,
+        dbPool: pool,
+        responseDetails: {
+          clientMessage: 'Failed to parse AI response for hero content',
+          statusCode: 500,
+          dbErrorMessage: `Failed to parse LLM Turn 1 response: ${parseError instanceof Error ? parseError.message : String(parseError)}`,
+          rawResponse: heroContentText,
+        },
+        operationContext: 'Parsing LLM Turn 1 (Hero Content) JSON',
+      });
     }
     console.log(
       'Parsed LLM Turn 1 Output (heroContentTurn1):',
@@ -524,35 +610,19 @@ Ensure the entire output is a single, valid JSON object. Remember to output ONLY
     } catch (parseError) {
       console.error('JSON Parsing Error:', parseError);
       console.error('Raw AI Response:', text); // Log the raw text for debugging
-      // Update job to failed before returning
-      if (clientJobId) {
-        try {
-          dbClient = await pool.connect();
-          await dbClient.query(
-            `UPDATE generation_jobs SET status = 'failed', error_msg = $1, updated_at = NOW()
-             WHERE id = $2`,
-            [
-              `Failed to parse AI response as JSON: ${(parseError as Error).message}`,
-              clientJobId,
-            ],
-          );
-        } catch (dbUpdateError) {
-          console.error(
-            'Failed to update job status to failed in DB:',
-            dbUpdateError,
-          );
-        } finally {
-          dbClient?.release();
-        }
-      }
-      return NextResponse.json(
-        {
-          error: 'Failed to parse AI response as JSON',
-          details: (parseError as Error).message,
-          rawResponse: text, // Include raw response for debugging
+      return handleGenerationError({
+        error: parseError,
+        span: rootSpan,
+        jobId: clientJobId,
+        dbPool: pool,
+        responseDetails: {
+          clientMessage: 'Failed to parse AI response for full store JSON',
+          statusCode: 500,
+          dbErrorMessage: `Failed to parse AI response as JSON: ${parseError instanceof Error ? parseError.message : String(parseError)}`,
+          rawResponse: text,
         },
-        { status: 500 },
-      );
+        operationContext: 'Parsing LLM Turn 2 (Full Store JSON)',
+      });
     }
 
     // Log the raw JSON from AI before any modifications
@@ -620,18 +690,37 @@ Ensure the entire output is a single, valid JSON object. Remember to output ONLY
     const ynsApiKey = process.env.YNS_AI_API_KEY;
 
     if (!ynsApiKey) {
-      console.error('YNS_AI_API_KEY environment variable is not set.');
-      return NextResponse.json(
-        { error: 'Internal Server Error: API key configuration missing.' },
-        { status: 500 },
-      );
+      return handleGenerationError({
+        error: new Error('YNS_AI_API_KEY environment variable is not set.'),
+        span: rootSpan,
+        jobId: clientJobId,
+        dbPool: pool,
+        responseDetails: {
+          clientMessage:
+            'Internal Server Error: API key configuration missing.',
+          statusCode: 500,
+          dbErrorMessage: 'YNS_AI_API_KEY environment variable is not set.',
+        },
+        operationContext: 'Checking YNS_AI_API_KEY',
+      });
     }
     if (!process.env.NEXT_PUBLIC_YNS_API_URL) {
-      console.error('NEXT_PUBLIC_YNS_API_URL environment variable is not set.');
-      return NextResponse.json(
-        { error: 'Internal Server Error: YNS API URL configuration missing.' },
-        { status: 500 },
-      );
+      return handleGenerationError({
+        error: new Error(
+          'NEXT_PUBLIC_YNS_API_URL environment variable is not set.',
+        ),
+        span: rootSpan,
+        jobId: clientJobId,
+        dbPool: pool,
+        responseDetails: {
+          clientMessage:
+            'Internal Server Error: YNS API URL configuration missing.',
+          statusCode: 500,
+          dbErrorMessage:
+            'NEXT_PUBLIC_YNS_API_URL environment variable is not set.',
+        },
+        operationContext: 'Checking NEXT_PUBLIC_YNS_API_URL',
+      });
     }
 
     try {
@@ -650,37 +739,19 @@ Ensure the entire output is a single, valid JSON object. Remember to output ONLY
       if (!ynsResponse.ok) {
         const errorBody = await ynsResponse.text(); // Use text() for non-JSON or to see raw error
         console.error('YNS API Error:', ynsResponse.status, errorBody);
-        // Update job to failed before returning
-        if (clientJobId) {
-          try {
-            dbClient = await pool.connect();
-            await dbClient.query(
-              `UPDATE generation_jobs SET status = 'failed', error_msg = $1, updated_at = NOW()
-               WHERE id = $2`,
-              [
-                `YNS API Error: ${ynsResponse.status} ${errorBody}`.substring(
-                  0,
-                  1000,
-                ),
-                clientJobId,
-              ], // Limit error message length
-            );
-          } catch (dbUpdateError) {
-            console.error(
-              'Failed to update job status to failed in DB:',
-              dbUpdateError,
-            );
-          } finally {
-            dbClient?.release();
-          }
-        }
-        return NextResponse.json(
-          {
-            error: `Failed to create store on YNS platform (Status: ${ynsResponse.status})`,
-            details: errorBody, // Forward parsed or raw error
+        return handleGenerationError({
+          error: new Error(`YNS API Error: ${ynsResponse.status} ${errorBody}`),
+          span: rootSpan,
+          jobId: clientJobId,
+          dbPool: pool,
+          responseDetails: {
+            clientMessage: `Failed to create store on YNS platform (Status: ${ynsResponse.status})`,
+            statusCode: ynsResponse.status, // Forward YNS status code
+            errorDetails: errorBody,
+            dbErrorMessage: `YNS API Error: ${ynsResponse.status} ${errorBody}`,
           },
-          { status: ynsResponse.status }, // Forward status code
-        );
+          operationContext: 'YNS API Call (non-OK response)',
+        });
       }
 
       const ynsData = await ynsResponse.json();
@@ -792,78 +863,38 @@ Latency Summary for Request (User: ${logIdentifier}):
         imageReplacementTimeMs: imageReplacementTimeMs, // Specific time for image replacement
       });
     } catch (ynsApiError) {
-      console.error('Error calling YNS API:', ynsApiError);
-      if (ynsApiError instanceof Error) {
-        return NextResponse.json(
-          {
-            error: 'Failed to communicate with YNS platform',
-            details: ynsApiError.message,
-          },
-          { status: 500 },
-        );
-      }
-      return NextResponse.json(
-        { error: 'Failed to communicate with YNS platform (Unknown Error)' },
-        { status: 500 },
-      );
+      return handleGenerationError({
+        error: ynsApiError,
+        span: rootSpan,
+        jobId: clientJobId,
+        dbPool: pool,
+        responseDetails: {
+          clientMessage: 'Failed to communicate with YNS platform',
+          statusCode: 500,
+          dbErrorMessage: `Error calling YNS API: ${ynsApiError instanceof Error ? ynsApiError.message : String(ynsApiError)}`,
+        },
+        operationContext: 'YNS API Call (fetch/communication error)',
+      });
     }
     // --- End YNS API Call ---
   } catch (error: any) {
-    console.error('Unhandled error in /api/generate:', error);
-    if (error instanceof Error) {
-      rootSpan.recordException(error);
-      rootSpan.setStatus({
-        code: SpanStatusCode.ERROR,
-        message: error.message,
-      });
-    } else {
-      rootSpan.recordException(new Error(String(error)));
-      rootSpan.setStatus({
-        code: SpanStatusCode.ERROR,
-        message: 'Unhandled error: Unknown type',
-      });
-    }
-
-    // --- Update job status to failed for unhandled errors ---
-    // Need to access clientJobId if possible. It might not be set if error is very early.
-    // This assumes clientJobId was parsed from the body before the error.
-    // If error happened before body parsing, clientJobId might be undefined.
-    const requestBodyForError = await req.json().catch(() => ({})); // Safely try to get body again or use empty
-    const jobIdForError = requestBodyForError.jobId;
-
-    if (jobIdForError) {
-      let dbClient: PoolClient | null = null;
-      try {
-        dbClient = await pool.connect();
-        await dbClient.query(
-          `UPDATE generation_jobs SET status = 'failed', error_msg = $1, updated_at = NOW()
-           WHERE id = $2`,
-          [
-            (error instanceof Error ? error.message : String(error)).substring(
-              0,
-              1000,
-            ),
-            jobIdForError,
-          ], // Limit error message length
-        );
-      } catch (dbUpdateError) {
-        console.error(
-          'Failed to update job status to failed in DB after unhandled error:',
-          dbUpdateError,
-        );
-      } finally {
-        dbClient?.release();
-      }
-    }
-    // --- End Update job status to failed ---
-
-    return NextResponse.json(
-      {
-        error: 'Internal Server Error',
-        details: error instanceof Error ? error.message : String(error),
+    // Safely access clientJobId which should be defined if this outer try block is reached
+    // It might be undefined if an error occurs before `const body = await req.json();`
+    // and `const clientJobId = body.jobId;` can be successfully executed.
+    // The handleGenerationError function is designed to handle cases where jobId might be undefined.
+    // We use `clientJobId` which is in scope from the main try block.
+    return handleGenerationError({
+      error: error,
+      span: rootSpan,
+      jobId: clientJobId, // Now correctly scoped, can be undefined if error happened before assignment
+      dbPool: pool,
+      responseDetails: {
+        clientMessage: 'Internal Server Error',
+        statusCode: 500,
+        // dbErrorMessage will default to error.message
       },
-      { status: 500 },
-    );
+      operationContext: 'Unhandled error in /api/generate',
+    });
   } finally {
     rootSpan.end();
   }
