@@ -142,6 +142,23 @@ export async function POST(req: Request) {
     console.log('userPrompt', userPrompt);
 
     const userId = body.userId;
+    const clientJobId = body.jobId; // Read client-generated jobId
+
+    // --- Validate clientJobId ---
+    if (!clientJobId || typeof clientJobId !== 'string') {
+      // Basic validation
+      rootSpan.setStatus({
+        code: SpanStatusCode.ERROR,
+        message: 'Client-generated jobId is required',
+      });
+      // Note: Cannot update generation_jobs table here as jobId is missing/invalid.
+      return NextResponse.json(
+        { error: 'Client-generated jobId is required and must be a string' },
+        { status: 400 },
+      );
+    }
+    rootSpan.setAttribute('app.jobId', clientJobId); // Add jobId to root span
+    console.log('clientJobId', clientJobId);
 
     // --- Get User Email from Session ---
     let userEmail: string | null = null;
@@ -187,11 +204,73 @@ export async function POST(req: Request) {
 
     console.log(`Using image generation mode: ${imageGenerationMode}`);
 
+    // --- Initialize job in database ---
+    let dbClient: PoolClient | null = null;
+    try {
+      dbClient = await pool.connect();
+      await dbClient.query(
+        `INSERT INTO generation_jobs (id, user_id, status, created_at, updated_at)
+         VALUES ($1, $2, 'queued', NOW(), NOW())`,
+        [clientJobId, userId],
+      );
+      console.log(
+        'Job with status "queued" inserted into database:',
+        clientJobId,
+      );
+    } catch (dbError) {
+      console.error(
+        'Failed to insert initial job status into database:',
+        dbError,
+      );
+      if (dbError instanceof Error) {
+        rootSpan.recordException(dbError);
+        rootSpan.setStatus({
+          code: SpanStatusCode.ERROR,
+          message: `DB initial insert failed: ${dbError.message}`,
+        });
+      } else {
+        rootSpan.recordException(new Error(String(dbError)));
+        rootSpan.setStatus({
+          code: SpanStatusCode.ERROR,
+          message: 'DB initial insert failed: Unknown error',
+        });
+      }
+      // No need to update job to 'failed' here as it wasn't properly created or jobId might be the issue.
+      return NextResponse.json(
+        { error: 'Internal Server Error: Failed to initialize job tracking' },
+        { status: 500 },
+      );
+    } finally {
+      dbClient?.release();
+    }
+    // --- End Initialize job in database ---
+
     if (!userPrompt || typeof userPrompt !== 'string') {
       rootSpan.setStatus({
         code: SpanStatusCode.ERROR,
         message: 'Prompt is required',
       });
+      // Update job to failed before returning
+      if (clientJobId) {
+        try {
+          dbClient = await pool.connect();
+          await dbClient.query(
+            `UPDATE generation_jobs SET status = 'failed', error_msg = $1, updated_at = NOW()
+             WHERE id = $2`,
+            [
+              'Internal Server Error: Invalid prompt configuration',
+              clientJobId,
+            ],
+          );
+        } catch (dbUpdateError) {
+          console.error(
+            'Failed to update job status to failed in DB:',
+            dbUpdateError,
+          );
+        } finally {
+          dbClient?.release();
+        }
+      }
       return NextResponse.json(
         { error: 'Prompt is required and must be a string' },
         { status: 400 },
@@ -215,6 +294,27 @@ export async function POST(req: Request) {
       console.error(
         'Critical Error: Prompt placeholder {user_prompt} not found in gen-store-json-prompt.md',
       );
+      // Update job to failed before returning
+      if (clientJobId) {
+        try {
+          dbClient = await pool.connect();
+          await dbClient.query(
+            `UPDATE generation_jobs SET status = 'failed', error_msg = $1, updated_at = NOW()
+             WHERE id = $2`,
+            [
+              'Internal Server Error: Invalid prompt configuration',
+              clientJobId,
+            ],
+          );
+        } catch (dbUpdateError) {
+          console.error(
+            'Failed to update job status to failed in DB:',
+            dbUpdateError,
+          );
+        } finally {
+          dbClient?.release();
+        }
+      }
       return NextResponse.json(
         { error: 'Internal Server Error: Invalid prompt configuration' },
         { status: 500 },
@@ -335,6 +435,35 @@ export async function POST(req: Request) {
       heroContentTurn1,
     );
     // TODO: Later, save heroContentTurn1 to generation_jobs table with status 'hero_ready'
+    // --- Update job status to hero_ready ---
+    try {
+      dbClient = await pool.connect();
+      await dbClient.query(
+        `UPDATE generation_jobs SET status = 'hero_ready', hero_json = $1, updated_at = NOW()
+         WHERE id = $2`,
+        [JSON.stringify(heroContentTurn1), clientJobId], // Store heroContentTurn1 as hero_json
+      );
+      console.log(
+        'Job with status "hero_ready" updated in database:',
+        clientJobId,
+      );
+    } catch (dbError) {
+      console.error(
+        'Failed to update job status to hero_ready in database:',
+        dbError,
+      );
+      if (dbError instanceof Error) {
+        rootSpan.recordException(dbError);
+      } else {
+        rootSpan.recordException(new Error(String(dbError)));
+      }
+      // Log error, but proceed. The final status update will capture overall success/failure.
+      // Or, decide if this is critical enough to halt and set job to 'failed'.
+      // For now, logging and continuing.
+    } finally {
+      dbClient?.release();
+    }
+    // --- End Update job status to hero_ready ---
 
     // --- Construct messages for LLM Turn 2 ---
     const turn2InstructionMessageContent = `Okay, thanks for the excellent preview of the Hero section
@@ -395,6 +524,27 @@ Ensure the entire output is a single, valid JSON object. Remember to output ONLY
     } catch (parseError) {
       console.error('JSON Parsing Error:', parseError);
       console.error('Raw AI Response:', text); // Log the raw text for debugging
+      // Update job to failed before returning
+      if (clientJobId) {
+        try {
+          dbClient = await pool.connect();
+          await dbClient.query(
+            `UPDATE generation_jobs SET status = 'failed', error_msg = $1, updated_at = NOW()
+             WHERE id = $2`,
+            [
+              `Failed to parse AI response as JSON: ${(parseError as Error).message}`,
+              clientJobId,
+            ],
+          );
+        } catch (dbUpdateError) {
+          console.error(
+            'Failed to update job status to failed in DB:',
+            dbUpdateError,
+          );
+        } finally {
+          dbClient?.release();
+        }
+      }
       return NextResponse.json(
         {
           error: 'Failed to parse AI response as JSON',
@@ -498,35 +648,43 @@ Ensure the entire output is a single, valid JSON object. Remember to output ONLY
       ynsApiCallTimeMs = endTimeYnsApi - startTimeYnsApi;
 
       if (!ynsResponse.ok) {
-        const errorText = await ynsResponse.text();
-        console.error(`YNS API Error (${ynsResponse.status}): ${errorText}`);
-        // Attempt to parse error response if JSON
-        let errorDetails: any = errorText;
-        try {
-          errorDetails = JSON.parse(errorText);
-        } catch (e) {
-          /* Ignore if not JSON */
+        const errorBody = await ynsResponse.text(); // Use text() for non-JSON or to see raw error
+        console.error('YNS API Error:', ynsResponse.status, errorBody);
+        // Update job to failed before returning
+        if (clientJobId) {
+          try {
+            dbClient = await pool.connect();
+            await dbClient.query(
+              `UPDATE generation_jobs SET status = 'failed', error_msg = $1, updated_at = NOW()
+               WHERE id = $2`,
+              [
+                `YNS API Error: ${ynsResponse.status} ${errorBody}`.substring(
+                  0,
+                  1000,
+                ),
+                clientJobId,
+              ], // Limit error message length
+            );
+          } catch (dbUpdateError) {
+            console.error(
+              'Failed to update job status to failed in DB:',
+              dbUpdateError,
+            );
+          } finally {
+            dbClient?.release();
+          }
         }
-
         return NextResponse.json(
           {
             error: `Failed to create store on YNS platform (Status: ${ynsResponse.status})`,
-            details: errorDetails, // Forward parsed or raw error
+            details: errorBody, // Forward parsed or raw error
           },
           { status: ynsResponse.status }, // Forward status code
         );
       }
 
-      const ynsResult = await ynsResponse.json();
-      console.log('YNS API Success Response:', ynsResult);
-
-      if (!ynsResult.url) {
-        console.error('YNS API response missing URL:', ynsResult);
-        return NextResponse.json(
-          { error: 'YNS API did not return a store URL', details: ynsResult },
-          { status: 500 },
-        );
-      }
+      const ynsData = await ynsResponse.json();
+      const storeUrl = ynsData.url; // Assuming the response has a "domain" field
 
       // --- Save to generated_stores table ---
       const heroImageUrlToSave = extractHeroImageUrl(finalJson);
@@ -549,7 +707,7 @@ Ensure the entire output is a single, valid JSON object. Remember to output ONLY
             userId,
             userEmail,
             userPrompt,
-            ynsResult.url,
+            storeUrl,
             heroImageUrlToSave, // Now guaranteed to be a string
             JSON.stringify(finalJson),
           ]);
@@ -558,7 +716,7 @@ Ensure the entire output is a single, valid JSON object. Remember to output ONLY
 
           const newEntryId = result.rows[0]?.id;
           console.log(
-            `Successfully saved generated store metadata for user ${userId} (Email: ${userEmail}). URL: ${ynsResult.url}. DB Entry ID: ${newEntryId}`,
+            `Successfully saved generated store metadata for user ${userId} (Email: ${userEmail}). URL: ${storeUrl}. DB Entry ID: ${newEntryId}`,
           );
         } catch (dbError: any) {
           // Explicitly type dbError
@@ -577,6 +735,37 @@ Ensure the entire output is a single, valid JSON object. Remember to output ONLY
         );
       }
       // --- End Save to generated_stores table ---
+
+      // --- Update job status to full_ready ---
+      if (clientJobId) {
+        try {
+          dbClient = await pool.connect();
+          await dbClient.query(
+            `UPDATE generation_jobs
+             SET status = 'full_ready', full_json = $1, store_url = $2, updated_at = NOW()
+             WHERE id = $3`,
+            [JSON.stringify(finalJson), storeUrl, clientJobId],
+          );
+          console.log(
+            'Job with status "full_ready" updated in database:',
+            clientJobId,
+          );
+        } catch (dbError) {
+          console.error(
+            'Failed to update job status to full_ready in database:',
+            dbError,
+          );
+          if (dbError instanceof Error) {
+            rootSpan.recordException(dbError);
+          } else {
+            rootSpan.recordException(new Error(String(dbError)));
+          }
+          // Log error. The client will still get the response, but job status might be inconsistent.
+        } finally {
+          dbClient?.release();
+        }
+      }
+      // --- End Update job status to full_ready ---
 
       // --- Latency Summary Logging ---
       const logIdentifier =
@@ -597,7 +786,7 @@ Latency Summary for Request (User: ${logIdentifier}):
       // --- End Latency Summary Logging ---
 
       return NextResponse.json({
-        storeUrl: ynsResult.url,
+        storeUrl: storeUrl,
         storeJson: finalJson, // Return the modified JSON (which now includes injected themes and replaced images)
         generationTimeMs: totalJsonGenerationTimeMs, // This is now the end-to-end JSON gen time
         imageReplacementTimeMs: imageReplacementTimeMs, // Specific time for image replacement
@@ -619,18 +808,60 @@ Latency Summary for Request (User: ${logIdentifier}):
       );
     }
     // --- End YNS API Call ---
-  } catch (error) {
-    console.error('API Error in POST handler:', error);
-    // Removed the check for !pool as pool is no longer directly used here.
-    // Database related startup errors would likely manifest through errors from replaceImagePlaceholders.
+  } catch (error: any) {
+    console.error('Unhandled error in /api/generate:', error);
     if (error instanceof Error) {
-      return NextResponse.json(
-        { error: 'Internal Server Error', details: error.message },
-        { status: 500 },
-      );
+      rootSpan.recordException(error);
+      rootSpan.setStatus({
+        code: SpanStatusCode.ERROR,
+        message: error.message,
+      });
+    } else {
+      rootSpan.recordException(new Error(String(error)));
+      rootSpan.setStatus({
+        code: SpanStatusCode.ERROR,
+        message: 'Unhandled error: Unknown type',
+      });
     }
+
+    // --- Update job status to failed for unhandled errors ---
+    // Need to access clientJobId if possible. It might not be set if error is very early.
+    // This assumes clientJobId was parsed from the body before the error.
+    // If error happened before body parsing, clientJobId might be undefined.
+    const requestBodyForError = await req.json().catch(() => ({})); // Safely try to get body again or use empty
+    const jobIdForError = requestBodyForError.jobId;
+
+    if (jobIdForError) {
+      let dbClient: PoolClient | null = null;
+      try {
+        dbClient = await pool.connect();
+        await dbClient.query(
+          `UPDATE generation_jobs SET status = 'failed', error_msg = $1, updated_at = NOW()
+           WHERE id = $2`,
+          [
+            (error instanceof Error ? error.message : String(error)).substring(
+              0,
+              1000,
+            ),
+            jobIdForError,
+          ], // Limit error message length
+        );
+      } catch (dbUpdateError) {
+        console.error(
+          'Failed to update job status to failed in DB after unhandled error:',
+          dbUpdateError,
+        );
+      } finally {
+        dbClient?.release();
+      }
+    }
+    // --- End Update job status to failed ---
+
     return NextResponse.json(
-      { error: 'Internal Server Error (Unknown)' },
+      {
+        error: 'Internal Server Error',
+        details: error instanceof Error ? error.message : String(error),
+      },
       { status: 500 },
     );
   } finally {

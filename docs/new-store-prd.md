@@ -1140,7 +1140,8 @@ The existing single main prompt file will be used, with a specific instruction a
       - Execute LLM Turn 2 (Full store JSON), incorporating Hero from Turn 1.
       - Log the `full_json` to the console.
       - Perform theme injection, image placeholder replacement, and YNS API call as currently done.
-- [ ] **Task 3: Backend Route Refactor (`POST /api/generate`)**
+- [x] **Task 3: Client-side Job ID & Backend Route Refactor (`POST /api/generate`)**
+    - Generate a client-side `jobId` (e.g., using `crypto.randomUUID()`) before making the `POST /api/generate` call.
     - Modify the route to accept `jobId` in the request body.
     - Implement the initial `INSERT` into `generation_jobs` with `status = 'queued'`.
     - Add job state updates to the LLM interaction logic for two-turn conversation:
@@ -1154,7 +1155,6 @@ The existing single main prompt file will be used, with a specific instruction a
     - Implement the database query to fetch job status by `jobId`.
     - Return the status and relevant data as JSON.
 - [ ] **Task 5: Frontend Integration**
-    - Generate a client-side `jobId` (e.g., using `crypto.randomUUID()`) before making the `POST /api/generate` call.
     - Implement the polling loop to call the `/status` endpoint.
     - Update UI based on polled status:
         - Render Hero section content when `status = 'hero_ready'`.

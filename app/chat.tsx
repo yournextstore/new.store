@@ -60,14 +60,22 @@ export const ChatInner = ({ user }: { user: User }) => {
     setResponseJson(null); // Reset JSON state
     setStoreUrl(null); // Reset store URL state
     setGenerationTime(null);
+
+    const jobId = crypto.randomUUID(); // Generate client-side jobId
+
     try {
       const response = await fetch('/api/generate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        // Send prompt and selectedUserId and imageGenerationMode
-        body: JSON.stringify({ prompt, userId: user.id, imageGenerationMode }),
+        // Send prompt, userId, imageGenerationMode, and jobId
+        body: JSON.stringify({
+          prompt,
+          userId: user.id,
+          imageGenerationMode,
+          jobId, // Include the generated jobId
+        }),
       });
 
       if (!response.ok) {
