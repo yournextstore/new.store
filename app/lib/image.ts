@@ -12,6 +12,7 @@ import { pool } from '@/lib/db';
 import { embed } from 'ai';
 import { processSinglePlaceholder } from './image-generation'; // Assuming image-generation.ts is in the same app/lib directory
 import type { GenerationMode } from './image-generation';
+import type { HeliconeRequestContext } from './request-context';
 
 // --- Constants & Types ---
 // TODO: If specific Helicone headers (e.g., user ID, session ID) are needed for embedding calls,
@@ -31,6 +32,7 @@ async function findImageInDB(
   description: string,
   imageType: 'hero' | 'product',
   alignment?: 'left' | 'right',
+  heliconeContext?: HeliconeRequestContext,
 ): Promise<string | null> {
   if (!pool) {
     console.error('Database pool is not initialized. Cannot query images.');
@@ -41,23 +43,19 @@ async function findImageInDB(
   let bestMatchUrl: string | null = null;
 
   try {
-    // TODO: Regarding Helicone headers for this specific `embed` call:
-    // The Vercel AI SDK's `embed()` function can accept an `options` object as its second argument,
-    // which can include `headers`. Example: embed({ model, value }, { headers: { ... } }).
-    // To pass dynamic Helicone headers here (e.g., 'Helicone-User-Id', 'Helicone-Session-Id'),
-    // the `findImageInDB` function (or its callers) would need to:
-    // 1. Receive these dynamic headers as parameters.
-    // 2. Construct a `dynamicHeaders` object for Helicone (similar to how it's done in api routes).
-    // 3. Merge these with any base Helicone headers (if not already handled by `getHeliconeBaseHeaders`
-    //    when the provider itself was created, though per-call headers here would override).
-    // 4. Pass them to the `embed` call: `await embed({ model: EMBEDDING_MODEL, value: description }, { headers: constructedHeaders });`
-    // For now, this `embed` call does not pass explicit per-call headers, so it relies on
-    // the static/default headers configured in `heliconeOpenAI()` within `ai-providers.ts`.
-    // Any dynamic headers passed to `heliconeOpenAI()` when `EMBEDDING_MODEL` was defined would apply,
-    // but currently, it's called without dynamic headers: `heliconeOpenAI().embedding(...)`.
+    const perCallHeaders: Record<string, string> = {};
+    if (heliconeContext?.userId)
+      perCallHeaders['Helicone-User-Id'] = heliconeContext.userId;
+    if (heliconeContext?.userEmail)
+      perCallHeaders['Helicone-Property-user-email'] =
+        heliconeContext.userEmail;
+    if (heliconeContext?.vercelRequestId)
+      perCallHeaders['Helicone-Session-Id'] = heliconeContext.vercelRequestId;
+
     const { embedding } = await embed({
       model: EMBEDDING_MODEL,
       value: description,
+      headers: perCallHeaders,
     });
 
     // Format the embedding array into the string format pgvector expects
@@ -192,6 +190,7 @@ export async function replaceImagePlaceholders(
   json: any,
   imageMode: GenerationMode,
   imageStyle?: string | null,
+  heliconeContext?: HeliconeRequestContext,
 ): Promise<any> {
   if (!pool) {
     console.warn('Database pool not available. Skipping image replacement.');
@@ -352,6 +351,7 @@ export async function replaceImagePlaceholders(
           description,
           imageType,
           alignmentForDbLookup, // This is 'left' | 'right' | undefined
+          heliconeContext,
         );
         if (stockMatchUrl) {
           targetObject[targetKey] = stockMatchUrl;
@@ -388,6 +388,7 @@ export async function replaceImagePlaceholders(
             imageType,
             alignmentForGeneration, // This is 'left' | 'right' | 'center' for heroes
             imageType === 'product' ? imageStyle : null, // imageStyle only for products
+            heliconeContext,
           );
 
           if (generationResult?.blobUrl) {
@@ -407,6 +408,7 @@ export async function replaceImagePlaceholders(
                 description,
                 'hero',
                 alignmentForDbLookup,
+                heliconeContext,
               );
               if (stockFallbackUrl) {
                 targetObject[targetKey] = stockFallbackUrl;

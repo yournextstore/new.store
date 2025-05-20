@@ -64,9 +64,10 @@ export const heliconeOpenAI = (
       '[AI Providers] HELICONE_API_KEY is not set. Helicone logging for OpenAI will likely fail.',
     );
   }
+  const heliconeHeaders = getHeliconeBaseHeaders(dynamicHeaders);
   return createOpenAI({
     baseURL: 'https://oai.helicone.ai/v1',
-    headers: getHeliconeBaseHeaders(dynamicHeaders),
+    headers: heliconeHeaders,
   });
 };
 

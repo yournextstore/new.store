@@ -14,6 +14,8 @@ import { pool } from '@/lib/db'; // Using @ alias for path
 import { auth } from '@/lib/auth'; // For getting user session
 import { headers } from 'next/headers'; // For getting headers for session
 import type { GoogleGenerativeAIProviderOptions } from '@ai-sdk/google';
+import type { HeliconeRequestContext } from '../../lib/request-context';
+import { nanoid } from 'nanoid';
 
 const tracer = trace.getTracer('ai-generate-route-tracer');
 
@@ -143,9 +145,11 @@ export async function POST(req: Request) {
 
     // --- Get User Email from Session ---
     let userEmail: string | null = null;
+    const requestHeadersInternal = await headers(); // headers() is async in Next.js 15+
     try {
-      const requestHeaders = await headers(); // Await the headers
-      const session = await auth.api.getSession({ headers: requestHeaders });
+      const session = await auth.api.getSession({
+        headers: requestHeadersInternal,
+      });
       if (session?.user?.email) {
         userEmail = session.user.email;
         console.log(
@@ -220,18 +224,32 @@ export async function POST(req: Request) {
     // Construct the full prompt for the AI
     const fullPrompt = prototypePrompt.replace('{user_prompt}', userPrompt);
 
+    // Define Helicone Context
+    const vercelRequestId =
+      requestHeadersInternal.get('x-vercel-id') || `localhost-${nanoid(10)}`;
+    const heliconeContext: HeliconeRequestContext = {
+      vercelRequestId,
+      userId,
+      userEmail: userEmail === null ? undefined : userEmail,
+    };
+
     const overallJsonGenerationStartTime = Date.now(); // Start for total JSON generation
 
     // Prepare dynamic Helicone headers
-    // These are the headers we want to pass to our heliconeOpenAI and heliconeGoogle functions
+    const vercelIdForHeliconeSession = heliconeContext.vercelRequestId;
+
     const dynamicHeliconeHeaders = {
-      'Helicone-User-Id': userId,
-      'Helicone-Session-Id': crypto.randomUUID(), // Generate a new session for each request
-      // TODO: Consider adding other dynamic headers relevant to this specific API endpoint
-      // For example, if a trace ID from an upstream service is available:
-      // 'Helicone-Trace-Id': req.headers.get('X-Trace-Id') || undefined,
-      'Helicone-Session-Path': '/api/generate', // Example custom property for Helicone
-      'Helicone-Session-Name': 'Store Generation', // Example custom property for Helicone
+      // Helicone-User-Id is a special header for user-level metrics in Helicone.
+      // See: https://docs.helicone.ai/features/advanced-usage/custom-properties
+      ...(heliconeContext.userId && {
+        'Helicone-User-Id': heliconeContext.userId,
+      }),
+      ...(heliconeContext.userEmail && {
+        'Helicone-Property-user-email': heliconeContext.userEmail,
+      }),
+      'Helicone-Session-Id': vercelIdForHeliconeSession,
+      'Helicone-Session-Path': '/api/generate',
+      'Helicone-Session-Name': 'Store Generation',
     };
 
     // Conditional model initialization
@@ -357,6 +375,7 @@ export async function POST(req: Request) {
       themedJson, // Use the JSON with themes injected
       imageGenerationMode,
       imageStyle, // Pass the original imageStyle
+      heliconeContext, // Pass the context here
     );
     const endTimeReplace = Date.now();
     imageReplacementTimeMs = endTimeReplace - startTimeReplace; // Calculate duration

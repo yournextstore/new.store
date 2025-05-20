@@ -7,6 +7,7 @@ import { callGetImgApi } from './getimg-api';
 import { callFalAiTextToImage } from './fal-api';
 import { callOpenAiTextToImage } from './openai-image-api';
 import { calculateHash } from './utils';
+import type { HeliconeRequestContext } from './request-context';
 
 // --- Types and Constants ---
 // Define and EXPORT the generation modes type
@@ -75,24 +76,35 @@ async function downloadImageFromUrl(getimgUrl: string): Promise<{
 /**
  * Generates a short name for an image based on its description.
  * @param description The image description.
+ * @param heliconeContext Optional Helicone request context.
  * @returns The generated short name, or null on failure.
  */
-async function generateShortName(description: string): Promise<string | null> {
+async function generateShortName(
+  description: string,
+  heliconeContext?: HeliconeRequestContext,
+): Promise<string | null> {
   if (!description) return null;
   try {
     const prompt = SHORT_NAME_PROMPT_TEMPLATE.replace(
       '{description}',
       description,
     );
-    // TODO: If dynamic per-call Helicone headers become available for short name generation,
-    // pass them as a second argument to `generateText`: e.g., { headers: dynamicHeaders }.
-    // Relies on provider-level Helicone headers for now.
+    const perCallHeaders: Record<string, string> = {};
+    if (heliconeContext?.userId)
+      perCallHeaders['Helicone-User-Id'] = heliconeContext.userId;
+    if (heliconeContext?.userEmail)
+      perCallHeaders['Helicone-Property-user-email'] =
+        heliconeContext.userEmail;
+    if (heliconeContext?.vercelRequestId)
+      perCallHeaders['Helicone-Session-Id'] = heliconeContext.vercelRequestId;
+
     const { text } = await generateText({
       model: SHORT_NAME_MODEL,
-      prompt: prompt,
+      prompt,
       system:
         'You are a helpful AI that generates short names for images. You output just the name, no other text.',
-      maxTokens: 20, // Limit tokens for a short name
+      maxTokens: 20,
+      headers: perCallHeaders,
     });
     return text.trim();
   } catch (error) {
@@ -104,19 +116,28 @@ async function generateShortName(description: string): Promise<string | null> {
 /**
  * Generates an embedding for a given text description.
  * @param description The text description.
+ * @param heliconeContext Optional Helicone request context.
  * @returns The embedding vector, or null on failure.
  */
 async function generateImageEmbedding(
   description: string,
+  heliconeContext?: HeliconeRequestContext,
 ): Promise<number[] | null> {
   if (!description) return null;
   try {
-    // TODO: If dynamic per-call Helicone headers become available for embeddings generated here,
-    // pass them as a second argument to `embed`: e.g., { headers: dynamicHeaders }.
-    // Relies on provider-level Helicone headers for now.
+    const perCallHeaders: Record<string, string> = {};
+    if (heliconeContext?.userId)
+      perCallHeaders['Helicone-User-Id'] = heliconeContext.userId;
+    if (heliconeContext?.userEmail)
+      perCallHeaders['Helicone-Property-user-email'] =
+        heliconeContext.userEmail;
+    if (heliconeContext?.vercelRequestId)
+      perCallHeaders['Helicone-Session-Id'] = heliconeContext.vercelRequestId;
+
     const { embedding } = await embed({
       model: EMBEDDING_MODEL,
       value: description,
+      headers: perCallHeaders,
     });
     return embedding;
   } catch (error) {
@@ -209,6 +230,7 @@ interface ProcessedImageResult {
  * @param imageType The type of the image.
  * @param alignment The alignment of the image.
  * @param imageStyle The image style (general style for product images consistent with the store concept).
+ * @param heliconeContext Optional Helicone request context.
  * @returns A promise resolving to the ProcessedImageResult.
  */
 export async function processSinglePlaceholder(
@@ -217,6 +239,7 @@ export async function processSinglePlaceholder(
   imageType: 'product' | 'hero',
   alignment?: 'left' | 'right' | 'center' | null,
   imageStyle?: string | null,
+  heliconeContext?: HeliconeRequestContext,
 ): Promise<ProcessedImageResult> {
   // Variables to hold intermediate results
   let externalImageUrl: string | null = null; // URL from GetImg/Fal
@@ -380,32 +403,45 @@ export async function processSinglePlaceholder(
       );
     }
 
-    // 6. Generate Embedding
-    embedding = await generateImageEmbedding(placeholder.description);
+    // 5. Generate Embedding
+    embedding = await generateImageEmbedding(
+      placeholder.description,
+      heliconeContext,
+    );
     if (!embedding) {
-      throw new Error('Embedding generation failed');
+      console.warn(
+        `Embedding generation failed for: ${placeholder.description.substring(0, 50)}...`,
+      );
     }
 
-    // 7. Generate Short Name
-    shortName = await generateShortName(placeholder.description);
-    // We proceed even if shortName is null, as it's nullable in DB
+    // 6. Generate Short Name
+    shortName = await generateShortName(
+      placeholder.description,
+      heliconeContext,
+    );
 
-    // 8. Insert into Database (using the determined source and final details)
-    dbSuccess = await insertImageRecord({
-      blob_url: finalBlobUrl,
-      description: placeholder.description,
-      embedding: embedding,
-      hash: imageHash,
-      filename: finalFilename,
-      shortName: shortName,
-      blob_pathname: finalBlobPathname,
-      source: sourceApi, // Pass the determined source API
-      generationPrompt: modifiedPrompt,
-      imageType: imageType, // Pass the determined image type
-      layoutHint: imageType === 'hero' ? alignment : null, // Pass alignment as hint only for heroes
-    });
-    if (!dbSuccess) {
-      throw new Error('Database insertion failed');
+    // 7. Insert into Database (using the determined source and final details)
+    if (embedding) {
+      dbSuccess = await insertImageRecord({
+        blob_url: finalBlobUrl,
+        description: placeholder.description,
+        embedding: embedding,
+        hash: imageHash,
+        filename: finalFilename,
+        shortName: shortName,
+        blob_pathname: finalBlobPathname,
+        source: sourceApi, // Pass the determined source API
+        generationPrompt: modifiedPrompt,
+        imageType: imageType, // Pass the determined image type
+        layoutHint: imageType === 'hero' ? alignment : null, // Pass alignment as hint only for heroes
+      });
+      if (!dbSuccess) {
+        throw new Error('Database insertion failed');
+      }
+    } else {
+      console.warn(
+        `[Image Gen Util] Missing embeddings for database insertion for: ${placeholder.description.substring(0, 50)}...`,
+      );
     }
 
     // If all steps succeeded
