@@ -1,7 +1,7 @@
 import { put } from '@vercel/blob';
 import path from 'node:path';
 import { embed, generateText } from 'ai'; // Added for embedding and text gen
-import { openai } from '@ai-sdk/openai'; // Added for models
+import { heliconeOpenAI } from './ai-providers'; // Import new provider
 import { pool } from '@/lib/db'; // Added for database access
 import { callGetImgApi } from './getimg-api';
 import { callFalAiTextToImage } from './fal-api';
@@ -17,8 +17,18 @@ export type GenerationMode =
   | 'openai-gpt-image-1';
 
 // --- Model Definitions ---
-const EMBEDDING_MODEL = openai.embedding('text-embedding-3-small');
-const SHORT_NAME_MODEL = openai('gpt-4o-mini'); // Using gpt-4o-mini for short name
+// TODO: Regarding Helicone headers for EMBEDDING_MODEL related `embed` calls:
+// Similar to app/lib/image.ts, `embed` calls using this model can accept per-call headers
+// via `embed({ model, value }, { headers: perCallHeaders })` if dynamic context is available.
+// For now, it relies on static headers from `heliconeOpenAI()` in `ai-providers.ts`.
+const EMBEDDING_MODEL = heliconeOpenAI().embedding('text-embedding-3-small');
+
+// TODO: Regarding Helicone headers for SHORT_NAME_MODEL related `generateText` calls:
+// `generateText` calls can also accept per-call headers via an options object:
+// `generateText({ model, prompt }, { headers: perCallHeaders })`.
+// Alternatively, dynamic headers could be passed to `heliconeOpenAI(dynamicHeaders)(modelName)`.
+// For now, it relies on static headers from `heliconeOpenAI()` in `ai-providers.ts`.
+const SHORT_NAME_MODEL = heliconeOpenAI()('gpt-4o-mini');
 const SHORT_NAME_PROMPT_TEMPLATE =
   'Generate a very short (3-5 words) title or label for an image based on the following description: "{description}"';
 
@@ -74,12 +84,17 @@ async function generateShortName(description: string): Promise<string | null> {
       '{description}',
       description,
     );
+    // TODO: If dynamic per-call Helicone headers become available for short name generation,
+    // pass them as a second argument to `generateText`: e.g., { headers: dynamicHeaders }.
+    // Relies on provider-level Helicone headers for now.
     const { text } = await generateText({
       model: SHORT_NAME_MODEL,
       prompt: prompt,
+      system:
+        'You are a helpful AI that generates short names for images. You output just the name, no other text.',
       maxTokens: 20, // Limit tokens for a short name
     });
-    return text.trim().replace(/["']/g, ''); // Remove quotes if AI adds them
+    return text.trim();
   } catch (error) {
     console.error('[Image Util] Failed to generate short name:', error);
     return null;
@@ -96,6 +111,9 @@ async function generateImageEmbedding(
 ): Promise<number[] | null> {
   if (!description) return null;
   try {
+    // TODO: If dynamic per-call Helicone headers become available for embeddings generated here,
+    // pass them as a second argument to `embed`: e.g., { headers: dynamicHeaders }.
+    // Relies on provider-level Helicone headers for now.
     const { embedding } = await embed({
       model: EMBEDDING_MODEL,
       value: description,

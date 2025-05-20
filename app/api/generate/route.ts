@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { generateText, type LanguageModel } from 'ai';
-import { openai } from '@ai-sdk/openai';
-import { google, type GoogleGenerativeAIProviderOptions } from '@ai-sdk/google'; // Added import for Google AI SDK
+import { heliconeOpenAI, heliconeGoogle } from '../../lib/ai-providers';
 import { trace, SpanStatusCode } from '@opentelemetry/api';
 import type { Span } from '@opentelemetry/api'; // Span used as type
 import fs from 'node:fs/promises';
@@ -14,6 +13,7 @@ import { replaceImagePlaceholders } from '../../lib/image';
 import { pool } from '@/lib/db'; // Using @ alias for path
 import { auth } from '@/lib/auth'; // For getting user session
 import { headers } from 'next/headers'; // For getting headers for session
+import type { GoogleGenerativeAIProviderOptions } from '@ai-sdk/google';
 
 const tracer = trace.getTracer('ai-generate-route-tracer');
 
@@ -222,19 +222,42 @@ export async function POST(req: Request) {
 
     const overallJsonGenerationStartTime = Date.now(); // Start for total JSON generation
 
+    // Prepare dynamic Helicone headers
+    // These are the headers we want to pass to our heliconeOpenAI and heliconeGoogle functions
+    const dynamicHeliconeHeaders = {
+      'Helicone-User-Id': userId,
+      'Helicone-Session-Id': crypto.randomUUID(), // Generate a new session for each request
+      // TODO: Consider adding other dynamic headers relevant to this specific API endpoint
+      // For example, if a trace ID from an upstream service is available:
+      // 'Helicone-Trace-Id': req.headers.get('X-Trace-Id') || undefined,
+      'Helicone-Session-Path': '/api/generate', // Example custom property for Helicone
+      'Helicone-Session-Name': 'Store Generation', // Example custom property for Helicone
+    };
+
     // Conditional model initialization
     let modelInstance: LanguageModel;
     let selectedModelLogName: string;
 
     const modelConfig = MODEL_CONFIGS[SELECTED_MODEL];
+
     if (modelConfig.provider === 'google') {
-      modelInstance = google(modelConfig.modelName);
+      // Pass dynamic headers to the provider function
+      modelInstance = heliconeGoogle(dynamicHeliconeHeaders)(
+        modelConfig.modelName,
+      );
       selectedModelLogName = `Google Gemini (${modelConfig.modelName})`;
-      console.log(`Initializing Google Gemini model: ${modelConfig.modelName}`);
+      console.log(
+        `Initializing Google Gemini model: ${modelConfig.modelName} via Helicone`,
+      );
     } else if (modelConfig.provider === 'openai') {
-      modelInstance = openai.responses(modelConfig.modelName);
+      // Pass dynamic headers to the provider function
+      modelInstance = heliconeOpenAI(dynamicHeliconeHeaders)(
+        modelConfig.modelName,
+      );
       selectedModelLogName = `OpenAI (${modelConfig.modelName})`;
-      console.log(`Initializing OpenAI model: ${modelConfig.modelName}`);
+      console.log(
+        `Initializing OpenAI model: ${modelConfig.modelName} via Helicone`,
+      );
     } else {
       throw new Error(`Unsupported model provider: ${modelConfig.provider}`);
     }
@@ -247,9 +270,8 @@ export async function POST(req: Request) {
     // Call the AI using Vercel AI SDK
     const llmStartTime = Date.now();
     const { text, response } = await generateText({
-      model: modelInstance, // Use the conditionally selected model instance
+      model: modelInstance,
       prompt: fullPrompt,
-      // Optional: Add system prompt or other parameters if needed
       system:
         'You are an AI assistant designed to output ONLY raw JSON data. Do not include any explanations, markdown formatting, or text outside the JSON structure.',
       providerOptions: {

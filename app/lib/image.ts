@@ -6,14 +6,22 @@
  * It may also coordinate with image generation services if stock images are not found or if generation is explicitly requested.
  */
 
-import { openai } from '@ai-sdk/openai';
+// import { openai } from '@ai-sdk/openai'; // To be removed
+import { heliconeOpenAI } from './ai-providers'; // Import new provider
 import { pool } from '@/lib/db';
 import { embed } from 'ai';
 import { processSinglePlaceholder } from './image-generation'; // Assuming image-generation.ts is in the same app/lib directory
 import type { GenerationMode } from './image-generation';
 
 // --- Constants & Types ---
-const EMBEDDING_MODEL = openai.embedding('text-embedding-3-small');
+// TODO: If specific Helicone headers (e.g., user ID, session ID) are needed for embedding calls,
+// consider how to propagate them to this point or if a generic set of headers is sufficient.
+// For now, using heliconeOpenAI() without dynamic headers, relying on defaults in ai-providers.ts.
+const EMBEDDING_MODEL = heliconeOpenAI().embedding('text-embedding-3-small');
+// This constant defines WHICH embedding model to use via our Helicone-configured provider.
+// The actual Helicone headers (static from ai-providers.ts and dynamic per call)
+// are handled when `heliconeOpenAI()` is called or when `embed()` is called with options.
+
 const SIMILARITY_THRESHOLD = 0.45; // Adjust as needed
 const FALLBACK_IMAGE_URL = 'https://via.placeholder.com/300'; // Use a generic placeholder URL if no match found
 const COSINE_DISTANCE_THRESHOLD = 1 - SIMILARITY_THRESHOLD; // pgvector uses distance
@@ -33,6 +41,20 @@ async function findImageInDB(
   let bestMatchUrl: string | null = null;
 
   try {
+    // TODO: Regarding Helicone headers for this specific `embed` call:
+    // The Vercel AI SDK's `embed()` function can accept an `options` object as its second argument,
+    // which can include `headers`. Example: embed({ model, value }, { headers: { ... } }).
+    // To pass dynamic Helicone headers here (e.g., 'Helicone-User-Id', 'Helicone-Session-Id'),
+    // the `findImageInDB` function (or its callers) would need to:
+    // 1. Receive these dynamic headers as parameters.
+    // 2. Construct a `dynamicHeaders` object for Helicone (similar to how it's done in api routes).
+    // 3. Merge these with any base Helicone headers (if not already handled by `getHeliconeBaseHeaders`
+    //    when the provider itself was created, though per-call headers here would override).
+    // 4. Pass them to the `embed` call: `await embed({ model: EMBEDDING_MODEL, value: description }, { headers: constructedHeaders });`
+    // For now, this `embed` call does not pass explicit per-call headers, so it relies on
+    // the static/default headers configured in `heliconeOpenAI()` within `ai-providers.ts`.
+    // Any dynamic headers passed to `heliconeOpenAI()` when `EMBEDDING_MODEL` was defined would apply,
+    // but currently, it's called without dynamic headers: `heliconeOpenAI().embedding(...)`.
     const { embedding } = await embed({
       model: EMBEDDING_MODEL,
       value: description,
