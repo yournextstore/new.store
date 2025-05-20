@@ -62,3 +62,37 @@ CREATE INDEX IF NOT EXISTS idx_store_votes_store_id ON store_votes(store_id);
 
 -- Optional: Index for faster lookups of a user's votes (though covered by unique_user_store_vote for single lookups)
 CREATE INDEX IF NOT EXISTS idx_store_votes_user_id ON store_votes(user_id);
+
+-- Function to update updated_at timestamp on relevant tables
+CREATE OR REPLACE FUNCTION trigger_set_timestamp()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Table to track the status of generation jobs
+CREATE TABLE generation_jobs (
+  id            UUID PRIMARY KEY, -- Client-generated UUIDv4, used as jobId
+  user_id       TEXT NOT NULL,    -- Identifies the user initiating the request
+  status        TEXT NOT NULL CHECK (status IN ('queued', 'hero_ready', 'full_ready', 'failed')),
+  hero_json     JSONB,            -- Stores the JSON for the Hero section (nullable)
+  full_json     JSONB,            -- Stores the complete store JSON (nullable)
+  store_url     TEXT,             -- URL of the generated store (set at 'full_ready', nullable)
+  error_msg     TEXT,             -- Error message if status is 'failed' (nullable)
+  created_at    TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+  updated_at    TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+-- Trigger to automatically update updated_at on row modification for generation_jobs
+CREATE TRIGGER set_timestamp_generation_jobs
+BEFORE UPDATE ON generation_jobs
+FOR EACH ROW
+EXECUTE FUNCTION trigger_set_timestamp();
+
+-- Optional: Index for querying by status, if frequent
+-- CREATE INDEX idx_generation_jobs_status ON generation_jobs (status);
+
+-- Optional: Index for querying by user_id, if frequent
+-- CREATE INDEX idx_generation_jobs_user_id ON generation_jobs (user_id);

@@ -1129,9 +1129,9 @@ The existing single main prompt file will be used, with a specific instruction a
 
 #### 8.8.6 Implementation Plan
 
-- [ ] **Task 1: Database Setup**
+- [x] **Task 1: Database Setup**
     - Define and execute the SQL migration to create the `generation_jobs` table.
-- [ ] **Task 2: Prompt Engineering**
+- [x] **Task 2: Prompt Engineering**
     - Update the main store generation prompt file (`gen-store-json-prompt.md`) to include the two-task epilogue.
     - Add a strong system-level instruction (if not already present) to enforce single-task responses per turn.
     - Adapt the LLM interaction logic for the two-turn conversation (but only log intermediate results for now):

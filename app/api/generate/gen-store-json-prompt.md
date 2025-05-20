@@ -453,11 +453,35 @@ _(Your generated JSON should follow this structure, with all content made up for
 
 ---
 
-### Your Task
-Based on the user's natural language prompt:
-1. Generate a complete JSON object following the structure and rules above.
-2. Use the hardcoded values for "logo" and "ogimage" as specified.
-3. Extract "storeName" and "storeDescription" from the prompt, defaulting to "Your Store" and a generic description if not provided.
-4. Populate "paths" with appropriate sections and data based on the user's description.
-5. Ensure the JSON is syntactically correct and includes all required fields.
-6. Ensure the output is a single, valid JSON object. Output **only the raw JSON content**, starting with { and ending with }, with no other text, explanation, or markdown formatting (like ```) surrounding it.
+### Overall Goal & Generation Method
+
+Your ultimate goal is to generate a complete JSON object for an e-commerce store, based on the user's natural language prompt and following all the structural rules, content guidelines, and specific instructions detailed in the preceding sections of this document (including JSON structure, sections, settings, products, and image placeholder formats).
+
+To achieve this, our interaction will proceed in two distinct tasks as detailed immediately below. This two-task process is designed to enable progressive feedback to the user.
+
+### Two-Turn Interaction for Progressive Feedback
+
+Our interaction will consist of two tasks:
+
+1️⃣ **First Task (This Turn):**
+   Based on the user's overall store concept (derived from their main prompt: `{user_prompt}`), you will generate **ONLY** a simple JSON object containing a suggested `heroTitle` and a `heroDescription` for the store's homepage Hero Section.
+
+   The JSON output for this first task **must** be a valid JSON object strictly adhering to this structure:
+   ```json
+   {
+     "heroTitle": "A Creative and Engaging Title for the Hero Section",
+     "heroDescription": "A concise and compelling description for the Hero Section, inviting users to explore."
+   }
+   ```
+   Generate creative and relevant content for these two fields based on the user's store idea. Please respond ONLY with this simple JSON for this first task, with no other text, explanation, or markdown formatting (like ```) surrounding it.
+
+2️⃣ **Second Task (Next Turn):**
+   After I confirm receipt of this initial hero content, I will provide it back to you. I will then ask you to generate the complete store JSON. In that second task, you will be required to use the exact `heroTitle` and `heroDescription` you provided in this first task when constructing the main HeroSection. You will also generate all other paths, sections, settings, and products according to the full original instructions provided earlier in this document. Specifically:
+   - Generate a complete JSON object following the structure and rules above.
+   - Use the hardcoded values for "logo" and "ogimage" as specified.
+   - Generate "storeName" and "storeDescription" aligned with the user's prompt, defaulting to "Your Store" and a generic description if it's hard to find a good alignment.
+   - Populate "paths" with appropriate sections and data based on the user's description.
+   - Ensure the JSON is syntactically correct and includes all required fields.
+   - Ensure the output is a single, valid JSON object. Output **only the raw JSON content**, starting with { and ending with }, with no other text, explanation, or markdown formatting (like ```) surrounding it.
+
+**Important: For this current turn, please focus ONLY on the First Task (This Turn) described above: generating the `heroTitle` and `heroDescription` as a simple JSON object.**

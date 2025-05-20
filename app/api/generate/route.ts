@@ -282,17 +282,92 @@ export async function POST(req: Request) {
 
     // log calling the selected model
     console.log(
-      `Calling ${selectedModelLogName} model with the full prompt...`,
+      `Calling ${selectedModelLogName} model with the full prompt for Turn 1 (Hero Content)...`,
     );
 
-    // Call the AI using Vercel AI SDK
-    const llmStartTime = Date.now();
+    // --- LLM Turn 1: Generate Hero Content ---
+    const llmTurn1StartTime = Date.now();
+    const { text: heroContentText, response: heroResponseTurn1 } =
+      await generateText({
+        model: modelInstance,
+        system:
+          'You are an AI assistant designed to output ONLY raw JSON data. Do not include any explanations, markdown formatting, or text outside the JSON structure.',
+        prompt: fullPrompt, // User prompt includes instructions for Turn 1
+        providerOptions: {
+          // Keep existing providerOptions
+          google: {
+            thinkingConfig: {
+              thinkingBudget: 0,
+            },
+          } satisfies GoogleGenerativeAIProviderOptions,
+        },
+      });
+    const llmTurn1EndTime = Date.now();
+    const llmTurn1DurationMs = llmTurn1EndTime - llmTurn1StartTime;
+    console.log(`LLM Turn 1 (Hero Content) took ${llmTurn1DurationMs}ms`);
+    console.log('Raw LLM Turn 1 Response (heroContentText):', heroContentText);
+
+    let heroContentTurn1: { heroTitle?: string; heroDescription?: string };
+    try {
+      const cleanedHeroContentText = heroContentText
+        .trim()
+        .replace(/^```json\s*/, '')
+        .replace(/\s*```$/, '');
+      heroContentTurn1 = JSON.parse(cleanedHeroContentText);
+      if (
+        typeof heroContentTurn1.heroTitle !== 'string' ||
+        typeof heroContentTurn1.heroDescription !== 'string'
+      ) {
+        throw new Error(
+          'heroTitle or heroDescription missing or not strings in Turn 1 response.',
+        );
+      }
+    } catch (parseError) {
+      console.error('LLM Turn 1 JSON Parsing Error:', parseError);
+      console.error('Raw AI Response (Turn 1):', heroContentText);
+      // For now, we'll throw to stop execution if Turn 1 fails, can be refined for job status 'failed' later
+      throw new Error(
+        `Failed to parse LLM Turn 1 response: ${(parseError as Error).message}`,
+      );
+    }
+    console.log(
+      'Parsed LLM Turn 1 Output (heroContentTurn1):',
+      heroContentTurn1,
+    );
+    // TODO: Later, save heroContentTurn1 to generation_jobs table with status 'hero_ready'
+
+    // --- Construct messages for LLM Turn 2 ---
+    const turn2InstructionMessageContent = `Okay, thanks for the excellent preview of the Hero section
+
+Now, please generate the complete store JSON as per the 'Second Task (Next Turn)' instructions in the original prompt I provided. This includes all paths, sections (using the previously generated title/description for the HeroSection on the homepage), settings, and products, following all rules from the initial comprehensive prompt.
+Ensure the entire output is a single, valid JSON object. Remember to output ONLY the raw JSON.`;
+
+    const messagesForTurn2 = [
+      {
+        role: 'system',
+        content:
+          'You are an AI assistant designed to output ONLY raw JSON data. Do not include any explanations, markdown formatting, or text outside the JSON structure.',
+      } as const,
+      { role: 'user', content: fullPrompt as string } as const,
+      { role: 'assistant', content: heroContentText as string } as const,
+      {
+        role: 'user',
+        content: turn2InstructionMessageContent as string,
+      } as const,
+    ];
+
+    // --- LLM Turn 2: Generate Full Store JSON ---
+    console.log(
+      `Calling ${selectedModelLogName} model for Turn 2 (Full Store JSON)...`,
+    );
+    const llmTurn2StartTime = Date.now();
+    // Note: variable 'text' will now hold the full store JSON from turn 2
+    // variable 'response' will now hold the full response object from turn 2
     const { text, response } = await generateText({
       model: modelInstance,
-      prompt: fullPrompt,
-      system:
-        'You are an AI assistant designed to output ONLY raw JSON data. Do not include any explanations, markdown formatting, or text outside the JSON structure.',
+      messages: messagesForTurn2, // Pass the constructed message history
       providerOptions: {
+        // Keep existing providerOptions
         google: {
           thinkingConfig: {
             thinkingBudget: 0,
@@ -300,12 +375,15 @@ export async function POST(req: Request) {
         } satisfies GoogleGenerativeAIProviderOptions,
       },
     });
-    console.log('response from generateText', response);
-    const llmEndTime = Date.now();
-    llmTextGenerationTimeMs = llmEndTime - llmStartTime;
-    console.log(`AI text generation took ${llmTextGenerationTimeMs}ms`);
+    const llmTurn2EndTime = Date.now();
+    const llmTurn2DurationMs = llmTurn2EndTime - llmTurn2StartTime;
+    llmTextGenerationTimeMs = llmTurn1DurationMs + llmTurn2DurationMs; // Sum of durations
+    console.log(`LLM Turn 2 (Full Store JSON) took ${llmTurn2DurationMs}ms`);
+    console.log(`Total LLM text generation time: ${llmTextGenerationTimeMs}ms`);
+    // TODO: Later, implement the backend safety-net check/override for heroTitle/Description here.
+    // For now, we assume the LLM correctly incorporates them.
 
-    // Parse the AI's response as JSON
+    // Parse the AI's response as JSON (this is now from Turn 2)
     let generatedJson: unknown;
     try {
       // Attempt to remove markdown fences if present
