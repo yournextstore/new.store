@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
-import { generateText } from 'ai';
+import { generateText, type LanguageModel } from 'ai';
 import { openai } from '@ai-sdk/openai';
+import { google, type GoogleGenerativeAIProviderOptions } from '@ai-sdk/google'; // Added import for Google AI SDK
 import { trace, SpanStatusCode } from '@opentelemetry/api';
 import type { Span } from '@opentelemetry/api'; // Span used as type
 import fs from 'node:fs/promises';
@@ -102,6 +103,29 @@ export async function POST(req: Request) {
   let ynsApiCallTimeMs: number | null = null;
   let databaseSaveTimeMs: number | string = 'Skipped';
 
+  // --- Model Selection ---
+  // Available models: 'gpt-4.1', 'gemini-2.5-flash'
+  type ModelProvider = 'openai' | 'google';
+  type ModelName = 'gpt-4.1' | 'gemini-2.5-flash';
+
+  interface ModelConfig {
+    provider: ModelProvider;
+    modelName: string;
+  }
+
+  const SELECTED_MODEL: ModelName = 'gpt-4.1';
+  const MODEL_CONFIGS: Record<ModelName, ModelConfig> = {
+    'gpt-4.1': {
+      provider: 'openai',
+      modelName: 'gpt-4.1',
+    },
+    'gemini-2.5-flash': {
+      provider: 'google',
+      modelName: 'gemini-2.5-flash-preview-04-17',
+    },
+  };
+  // --- End Model Selection ---
+
   const rootSpan: Span = tracer.startSpan('generate-store-request');
   try {
     // main prompt that generates the complete store JSON representation
@@ -198,20 +222,45 @@ export async function POST(req: Request) {
 
     const overallJsonGenerationStartTime = Date.now(); // Start for total JSON generation
 
-    const modelName = 'gpt-4.1';
+    // Conditional model initialization
+    let modelInstance: LanguageModel;
+    let selectedModelLogName: string;
 
-    // log calling the gpt-4o model
-    console.log(`Calling ${modelName} model with the full prompt...`);
+    const modelConfig = MODEL_CONFIGS[SELECTED_MODEL];
+    if (modelConfig.provider === 'google') {
+      modelInstance = google(modelConfig.modelName);
+      selectedModelLogName = `Google Gemini (${modelConfig.modelName})`;
+      console.log(`Initializing Google Gemini model: ${modelConfig.modelName}`);
+    } else if (modelConfig.provider === 'openai') {
+      modelInstance = openai.responses(modelConfig.modelName);
+      selectedModelLogName = `OpenAI (${modelConfig.modelName})`;
+      console.log(`Initializing OpenAI model: ${modelConfig.modelName}`);
+    } else {
+      throw new Error(`Unsupported model provider: ${modelConfig.provider}`);
+    }
+
+    // log calling the selected model
+    console.log(
+      `Calling ${selectedModelLogName} model with the full prompt...`,
+    );
 
     // Call the AI using Vercel AI SDK
     const llmStartTime = Date.now();
-    const { text } = await generateText({
-      model: openai.responses(modelName),
+    const { text, response } = await generateText({
+      model: modelInstance, // Use the conditionally selected model instance
       prompt: fullPrompt,
       // Optional: Add system prompt or other parameters if needed
       system:
         'You are an AI assistant designed to output ONLY raw JSON data. Do not include any explanations, markdown formatting, or text outside the JSON structure.',
+      providerOptions: {
+        google: {
+          thinkingConfig: {
+            thinkingBudget: 0,
+          },
+        } satisfies GoogleGenerativeAIProviderOptions,
+      },
     });
+    console.log('response from generateText', response);
     const llmEndTime = Date.now();
     llmTextGenerationTimeMs = llmEndTime - llmStartTime;
     console.log(`AI text generation took ${llmTextGenerationTimeMs}ms`);
