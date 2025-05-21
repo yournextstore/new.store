@@ -16,111 +16,18 @@ import type { GoogleGenerativeAIProviderOptions } from '@ai-sdk/google';
 import type { HeliconeRequestContext } from '../../lib/request-context';
 import { nanoid } from 'nanoid';
 
+// Import newly created utilities
+import {
+  handleGenerationError,
+  type HandleGenerationErrorParams,
+} from '../../../lib/generation-error-handler';
+import {
+  initializeJob,
+  updateJobToHeroReady,
+  updateJobToFullReady,
+} from '../../../lib/generation-job-tracker';
+
 const tracer = trace.getTracer('ai-generate-route-tracer');
-
-interface HandleGenerationErrorParams {
-  error: any;
-  span: Span;
-  jobId?: string; // Will only attempt DB update if this is provided and valid
-  dbPool: Pool; // Main DB pool instance, passed to the function
-  responseDetails: {
-    clientMessage: string; // For user-facing error property in NextResponse
-    statusCode: number;
-    dbErrorMessage?: string; // Specific message for generation_jobs.error_msg, defaults to error.message
-    errorDetails?: string; // For user-facing details property, defaults to error.message
-    rawResponse?: string; // Optional raw response for debugging in client response
-  };
-  operationContext: string; // For logging, e.g., "Validating clientJobId"
-}
-
-async function handleGenerationError({
-  error,
-  span,
-  jobId,
-  dbPool,
-  responseDetails,
-  operationContext,
-}: HandleGenerationErrorParams): Promise<NextResponse> {
-  const errorMessage = error instanceof Error ? error.message : String(error);
-  const errorStack = error instanceof Error ? error.stack : undefined;
-
-  console.error(
-    `Error during ${operationContext}: ${errorMessage}`,
-    errorStack ? `\nStack: ${errorStack}` : '',
-    responseDetails.rawResponse
-      ? `\nRaw Response: ${responseDetails.rawResponse}`
-      : '',
-  );
-
-  span.recordException(
-    error instanceof Error ? error : new Error(errorMessage),
-  );
-  span.setStatus({
-    code: SpanStatusCode.ERROR,
-    message: `Error during ${operationContext}: ${errorMessage.substring(0, 256)}`, // Truncate for span message
-  });
-
-  if (jobId && typeof jobId === 'string') {
-    let dbClientForUpdate: PoolClient | null = null;
-    try {
-      dbClientForUpdate = await dbPool.connect();
-      const dbErrorMsgToStore = (
-        responseDetails.dbErrorMessage || errorMessage
-      ).substring(0, 1000);
-      await dbClientForUpdate.query(
-        `UPDATE generation_jobs SET status = 'failed', error_msg = $1, updated_at = NOW()
-         WHERE id = $2`,
-        [dbErrorMsgToStore, jobId],
-      );
-      console.log(
-        `Job ${jobId} status updated to 'failed' in DB due to error in ${operationContext}.`,
-      );
-    } catch (dbUpdateError) {
-      const dbUpdateErrorMessage =
-        dbUpdateError instanceof Error
-          ? dbUpdateError.message
-          : String(dbUpdateError);
-      console.error(
-        `CRITICAL: Failed to update job ${jobId} status to 'failed' in DB after error in ${operationContext}: ${dbUpdateErrorMessage}`,
-      );
-      // Record this critical failure too
-      span.recordException(
-        dbUpdateError instanceof Error
-          ? dbUpdateError
-          : new Error(dbUpdateErrorMessage),
-      );
-      span.setAttribute('db.update.job.failed_status.error', true);
-    } finally {
-      dbClientForUpdate?.release();
-    }
-  } else if (jobId) {
-    // Log if jobId was provided but invalid type, or if logic intends to skip DB update
-    console.warn(
-      `Invalid jobId ('${jobId}') or scenario to skip DB update for ${operationContext}, skipping DB update for job status.`,
-    );
-  } else {
-    console.warn(
-      `No jobId provided for ${operationContext}, skipping DB update for job status.`,
-    );
-  }
-
-  const responseBody: {
-    error: string;
-    details?: string;
-    rawResponse?: string;
-  } = {
-    error: responseDetails.clientMessage,
-    details: responseDetails.errorDetails || errorMessage,
-  };
-
-  if (responseDetails.rawResponse) {
-    responseBody.rawResponse = responseDetails.rawResponse;
-  }
-
-  return NextResponse.json(responseBody, {
-    status: responseDetails.statusCode,
-  });
-}
 
 interface GenerationRequestContext {
   userId: string;
@@ -132,6 +39,10 @@ interface GenerationRequestContext {
   heliconeContext: HeliconeRequestContext;
   dbPool: Pool;
 }
+
+// --- Job Update Helper Functions ---
+// _initializeJob, _updateJobToHeroReady, and _updateJobToFullReady are now imported
+// --- End Job Update Helper Functions ---
 
 /**
  * Injects a default theme (global and section-specific colors) into the AI-generated JSON.
@@ -378,40 +289,14 @@ export async function POST(req: Request) {
     };
 
     // --- Initialize job in database ---
-    let dbClient: PoolClient | null = null;
-    try {
-      dbClient = await context.dbPool.connect();
-      await dbClient.query(
-        `INSERT INTO generation_jobs (id, user_id, status, created_at, updated_at)
-         VALUES ($1, $2, 'queued', NOW(), NOW())`,
-        [context.clientJobId, context.userId],
-      );
-      console.log(
-        'Job with status "queued" inserted into database:',
-        context.clientJobId,
-      );
-    } catch (dbError) {
-      // Job ID is known, but the job itself failed to initialize in DB.
-      // So, can't update status of a job that doesn't exist.
-      // handleGenerationError will attempt to log to span and console.
-      return handleGenerationError({
-        error: dbError,
-        span: context.rootSpan, // Use context
-        dbPool: context.dbPool, // Use context
-        responseDetails: {
-          clientMessage:
-            'Internal Server Error: Failed to initialize job tracking',
-          statusCode: 500,
-          dbErrorMessage:
-            dbError instanceof Error
-              ? `DB initial insert failed: ${dbError.message}`
-              : 'DB initial insert failed: Unknown error',
-        },
-        operationContext: 'Initializing job in database',
-      });
-    } finally {
-      dbClient?.release();
-    }
+    // This call will now throw if DB operation fails.
+    // The error will be caught by the main try/catch block of the POST function.
+    await initializeJob(
+      context.dbPool,
+      context.clientJobId,
+      context.userId,
+      context.rootSpan,
+    );
     // --- End Initialize job in database ---
 
     // Check that {user_prompt} is present in the prototypePrompt (uses context.userPrompt indirectly via fullPrompt)
@@ -544,31 +429,13 @@ export async function POST(req: Request) {
       'Parsed LLM Turn 1 Output (heroContentTurn1):',
       heroContentTurn1,
     );
-    // TODO: Later, save heroContentTurn1 to generation_jobs table with status 'hero_ready'
-    // --- Update job status to hero_ready ---
-    try {
-      dbClient = await context.dbPool.connect(); // Use context
-      await dbClient.query(
-        `UPDATE generation_jobs SET status = 'hero_ready', hero_json = $1, updated_at = NOW()
-         WHERE id = $2`,
-        [JSON.stringify(heroContentTurn1), context.clientJobId], // Use context
-      );
-      console.log(
-        'Job with status "hero_ready" updated in database:',
-        context.clientJobId,
-      ); // Use context
-    } catch (dbError) {
-      console.error(
-        'Failed to update job status to hero_ready in database:',
-        dbError,
-      );
-      if (dbError instanceof Error)
-        context.rootSpan.recordException(dbError); // Use context
-      else context.rootSpan.recordException(new Error(String(dbError))); // Use context
-    } finally {
-      dbClient?.release();
-    }
-    // --- End Update job status to hero_ready ---
+    // Update job to hero_ready. Errors here are logged by the helper but don't stop the flow.
+    await updateJobToHeroReady(
+      context.dbPool,
+      context.clientJobId,
+      heroContentTurn1,
+      context.rootSpan,
+    );
 
     // --- Construct messages for LLM Turn 2 ---
     const turn2InstructionMessageContent = `Okay, thanks for the excellent preview of the Hero section
@@ -825,33 +692,14 @@ Ensure the entire output is a single, valid JSON object. Remember to output ONLY
         );
       }
 
-      if (context.clientJobId) {
-        // Use context
-        try {
-          dbClient = await context.dbPool.connect(); // Use context
-          await dbClient.query(
-            `UPDATE generation_jobs
-             SET status = 'full_ready', full_json = $1, store_url = $2, updated_at = NOW()
-             WHERE id = $3`,
-            [JSON.stringify(finalJson), storeUrl, context.clientJobId], // Use context
-          );
-          console.log(
-            'Job with status "full_ready" updated in database:',
-            context.clientJobId,
-          ); // Use context
-        } catch (dbError) {
-          console.error(
-            'Failed to update job status to full_ready in database:',
-            dbError,
-          );
-          if (dbError instanceof Error)
-            context.rootSpan.recordException(dbError); // Use context
-          else context.rootSpan.recordException(new Error(String(dbError))); // Use context
-        } finally {
-          dbClient?.release();
-        }
-      }
-      // --- End Update job status to full_ready ---
+      // Update job to full_ready. Errors here are logged by the helper but don't stop the flow.
+      await updateJobToFullReady(
+        context.dbPool,
+        context.clientJobId,
+        finalJson,
+        storeUrl,
+        context.rootSpan,
+      );
 
       // --- Latency Summary Logging ---
       const logIdentifier =
@@ -892,19 +740,21 @@ Latency Summary for Request (User: ${logIdentifier}):
     }
     // --- End YNS API Call ---
   } catch (error: any) {
-    // For this top-level catch, context may not be initialized if an error occurred very early.
-    // Thus, we use rootSpan, clientJobId (if available from request parsing), and global pool directly.
+    // This main catch block will now also handle errors from _initializeJob
     return handleGenerationError({
       error: error,
       span: rootSpan,
-      jobId: clientJobId, // This is the clientJobId from the request body, might be undefined if error before its assignment
+      jobId: clientJobId,
       dbPool: pool,
       responseDetails: {
         clientMessage: 'Internal Server Error',
+        // If error is from _initializeJob, its specific message will be in error.message
+        // handleGenerationError already uses error.message for details and dbErrorMessage if not overridden
         statusCode: 500,
-        // dbErrorMessage will default to error.message
       },
-      operationContext: 'Unhandled error in /api/generate',
+      // The operationContext here is generic; handleGenerationError provides more detail from the error itself.
+      operationContext:
+        error.operationContext || 'Unhandled error in /api/generate', // Allow error to carry specific context
     });
   } finally {
     rootSpan.end();
