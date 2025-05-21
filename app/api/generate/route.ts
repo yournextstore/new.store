@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { generateText, type LanguageModel } from 'ai';
 import { heliconeOpenAI, heliconeGoogle } from '../../lib/ai-providers';
-import { trace, SpanStatusCode, type Span } from '@opentelemetry/api'; // Span used as type
+import { trace, type Span } from '@opentelemetry/api';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import util from 'node:util';
@@ -16,11 +16,7 @@ import type { GoogleGenerativeAIProviderOptions } from '@ai-sdk/google';
 import type { HeliconeRequestContext } from '../../lib/request-context';
 import { nanoid } from 'nanoid';
 
-// Import newly created utilities
-import {
-  handleGenerationError,
-  type HandleGenerationErrorParams,
-} from '../../../lib/generation-error-handler';
+import { handleGenerationError } from '../../../lib/generation-error-handler';
 import {
   initializeJob,
   updateJobToHeroReady,
@@ -39,10 +35,6 @@ interface GenerationRequestContext {
   heliconeContext: HeliconeRequestContext;
   dbPool: Pool;
 }
-
-// --- Job Update Helper Functions ---
-// _initializeJob, _updateJobToHeroReady, and _updateJobToFullReady are now imported
-// --- End Job Update Helper Functions ---
 
 /**
  * Injects a default theme (global and section-specific colors) into the AI-generated JSON.
