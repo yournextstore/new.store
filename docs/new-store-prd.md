@@ -1040,7 +1040,7 @@ This work-stream adds near-instant visual feedback while a store is being genera
 #### 8.8.1 Goals
 - Show a meaningful preview (Hero banner) within ~5 seconds of the user clicking “Generate”.
 - Keep the implementation “serverless-simple”: no external queue, no new infra, plain Postgres for state, HTTP polling from the browser.
-- Preserve today’s single serverless function as the execution engine; only its inner logic becomes two LLM turns.
+- Preserve today’s single serverless function as the execution engine; only its inner logic becomes two LLM turns, with intermediate status updates for image processing.
 
 #### 8.8.2 Flow Overview
 
@@ -1055,21 +1055,27 @@ This work-stream adds near-instant visual feedback while a store is being genera
 2.  **Long-lived worker (within the same `/api/generate` route)**
     The `/api/generate` route handler performs the following:
     - Inserts an initial row into a new `generation_jobs` table with `status = 'queued'`.
-    - Executes the store generation pipeline, which involves two LLM turns and other processing steps.
+    - Executes the store generation pipeline, which involves two LLM turns and image processing steps.
     - Updates the corresponding `generation_jobs` row in the database after each significant step:
 
-    | Stage        | Action                                     | DB `status` update | Relevant Data Stored in DB     |
-    |--------------|--------------------------------------------|--------------------|--------------------------------|
-    | `queued`     | Initial row inserted upon request receipt  | `'queued'`         | `jobId`, `user_id`             |
-    | `hero_ready` | LLM Turn 1 (Hero section only) finishes    | `'hero_ready'`     | `hero_json`                    |
-    | `full_ready` | LLM Turn 2 (Full JSON) + images + YNS sync | `'full_ready'`     | `full_json`, `store_url`       |
-    | `failed`     | Any unhandled error during the process     | `'failed'`         | `error_msg`                    |
+    | Stage                      | Action                                                                     | DB `status` update          | Relevant Data Stored in DB (`generation_jobs`)                         |
+    |----------------------------|----------------------------------------------------------------------------|-----------------------------|------------------------------------------------------------------------|
+    | `queued`                   | Initial row inserted upon request receipt                                  | `'queued'`                  | `jobId`, `user_id`, `created_at`, `updated_at`                         |
+    | `hero_json_ready`          | LLM Turn 1 (Hero section JSON with placeholders) finishes                  | `'hero_json_ready'`         | `hero_json` (placeholders), `updated_at`                               |
+    | `store_skeleton_ready`     | LLM Turn 2 (Full store JSON with placeholders) finishes                    | `'store_skeleton_ready'`    | `full_json` (placeholders), `updated_at`                               |
+    | `image_processing`         | (Optional) Image generation/selection begins for placeholders in `full_json` | `'image_processing'`        | `updated_at`                                                           |
+    | `images_resolved`          | All image placeholders in `full_json` replaced with final URLs             | `'images_resolved'`         | `full_json` (final image URLs), `updated_at`                           |
+    | `store_ready`              | YNS API sync complete for the final `full_json`                            | `'store_ready'`             | `store_url`, `updated_at` (final `full_json` is already set)           |
+    | `failed`                   | Any unhandled error during the process                                     | `'failed'`                  | `error_msg`, `updated_at`                                              |
 
-    The original `POST` request remains open while these operations occur. Once the entire process is complete (reaches `full_ready` or `failed`), the `POST` request returns a final response, similar to the current implementation (e.g., `{storeUrl, storeJson, generationTimeMs}`).
+    The original `POST` request remains open while these operations occur. Once the entire process is complete (reaches `store_ready` or `failed`), the `POST` request returns a final response, similar to the current implementation (e.g., `{storeUrl, storeJson, generationTimeMs}`).
 
 3.  **Client rendering via polling**
-    - On receiving a polling response with `status = 'hero_ready'`, the UI renders the Hero section content (e.g., title, description) and may display a progress indicator.
-    - On `status = 'full_ready'`, the client loads the live store (e.g., in an iframe or by redirecting to `store_url`) and stops the polling loop.
+    - On receiving a polling response with `status = 'hero_json_ready'`, the UI renders the Hero section content (e.g., title, description from `hero_json`) and may display a progress indicator like "Generating store details...".
+    - On `status = 'store_skeleton_ready'`, the UI can indicate "Finalizing content structure...". The client *could* parse `full_json` (with placeholders) for a more detailed preview if desired.
+    - On `status = 'image_processing'`, the UI can show "Generating images...".
+    - On `status = 'images_resolved'`, the UI can show "Preparing your store preview...".
+    - On `status = 'store_ready'`, the client loads the live store (e.g., in an iframe or by redirecting to `store_url`) and stops the polling loop.
     - On `status = 'failed'`, the UI displays an appropriate error message.
 
 #### 8.8.3 Database Schema
@@ -1080,10 +1086,10 @@ A new table will be introduced to track the status of generation jobs:
 CREATE TABLE generation_jobs (
   id            UUID PRIMARY KEY,
   user_id       TEXT NOT NULL,          -- Identifies the user initiating the request
-  status        TEXT NOT NULL,          -- e.g., 'queued', 'hero_ready', 'full_ready', 'failed'
+  status        TEXT NOT NULL,          -- e.g., 'queued', 'hero_json_ready', 'store_skeleton_ready', 'image_processing', 'images_resolved', 'store_ready', 'failed'
   hero_json     JSONB,                  -- Stores the JSON for the Hero section (nullable, ~1–2 KB)
   full_json     JSONB,                  -- Stores the complete store JSON (nullable, ~1 MB)
-  store_url     TEXT,                   -- URL of the generated store (set at 'full_ready', nullable)
+  store_url     TEXT,                   -- URL of the generated store (set at 'store_ready', nullable)
   error_msg     TEXT,                   -- Error message if status is 'failed' (nullable)
   created_at    TIMESTAMPTZ DEFAULT now(),
   updated_at    TIMESTAMPTZ DEFAULT now() -- Should be updated on each status change
@@ -1097,8 +1103,8 @@ CREATE TABLE generation_jobs (
     -   The request body *must* include the client-generated `jobId`.
     -   **Logic:**
         -   Inserts a new row into `generation_jobs` with `status = 'queued'`.
-        -   Executes the two-turn LLM pipeline and subsequent processing.
-        -   Performs `UPDATE` operations on the `generation_jobs` row for that `jobId` at each stage (`hero_ready`, `full_ready`, `failed`).
+        -   Executes the two-turn LLM pipeline, followed by image processing, and then YNS API sync.
+        -   Performs `UPDATE` operations on the `generation_jobs` row for that `jobId` at each stage (`hero_json_ready`, `store_skeleton_ready`, `image_processing`, `images_resolved`, `store_ready`, `failed`).
         -   The long-lived request eventually returns the final outcome (e.g., `{ storeUrl, ... }`), consistent with the current API contract.
 
 2.  **`GET /api/generate/{jobId}/status`** (New)
@@ -1107,7 +1113,8 @@ CREATE TABLE generation_jobs (
         -   Queries the `generation_jobs` table for the given `jobId`.
         -   Returns `404 Not Found` if the `jobId` does not exist.
         -   Otherwise, returns a JSON object with the current status and relevant data:
-            `{ status: string, hero_json?: object, store_url?: string, error_msg?: string }`.
+            `{ status: string, hero_json?: object, full_json?: object, store_url?: string, error_msg?: string }`.
+            (Note: `hero_json` is relevant at/after `hero_json_ready`. `full_json` (with placeholders) is relevant at `store_skeleton_ready`. `full_json` (with resolved URLs) is relevant at `images_resolved` and `store_ready`. `store_url` is relevant at `store_ready`.)
     -   Authentication: No specific auth is required for this endpoint as the `jobId` is unguessable and only provides status for a specific job.
 
 #### 8.8.5 Prompt & LLM Interaction
@@ -1121,11 +1128,12 @@ The existing single main prompt file will be used, with a specific instruction a
 > Please respond ONLY with the JSON for task 1 in this current turn."
 
 -   **Turn 1:** The backend sends the full prompt (with the epilogue) to the LLM. The LLM is expected to return JSON containing only the HeroSection and essential settings.
--   **Backend after Turn 1:** The received `hero_json` is saved to the database.
+-   **Backend after Turn 1:** The received `hero_json` is saved to the database (triggers `status = 'hero_json_ready'`).
 -   **Turn 2:** The backend sends a new message to the LLM (as part of the same conversation history) like:
     > "Thank you for the HeroSection JSON. It has been noted. Now, please proceed with task 2 and generate the complete store JSON, ensuring you reuse the HeroSection content from your previous response verbatim."
--   The LLM then generates the full store JSON.
--   **Safety Net:** The backend will still programmatically splice the `hero_json` from Turn 1 into the final `full_json` from Turn 2 to ensure consistency, regardless of the LLM's adherence to the reuse instruction.
+-   The LLM then generates the full store JSON (this will be `full_json` with image placeholders).
+-   **Backend after Turn 2:** The `full_json` (with placeholders) is saved to the database (triggers `status = 'store_skeleton_ready'`). Image processing then begins.
+-   **Safety Net:** The backend will still programmatically splice the `hero_json` from Turn 1 into the final `full_json` from Turn 2 to ensure consistency, regardless of the LLM's adherence to the reuse instruction. This merged JSON (still with placeholders for other images) becomes the `full_json` for the `store_skeleton_ready` state.
 
 #### 8.8.6 Implementation Plan
 
@@ -1149,7 +1157,19 @@ The existing single main prompt file will be used, with a specific instruction a
         - `UPDATE` `generation_jobs` to `status = 'hero_ready'` with `hero_json`.
         - Execute LLM Turn 2 (Full store JSON), incorporating Hero from Turn 1.
         - Perform theme injection, image placeholder replacement, and YNS API call as currently done.
-        - `UPDATE` `generation_jobs` to `status = 'full_ready'` with `full_json` and `store_url`, or to `status = 'failed'` with `error_msg` if errors occur.
+        - `UPDATE` `generation_jobs` to `status = 'full_ready'` with `full_json` and `store_url`, or to `status = 'failed'` with `error_msg` if errors occur. (Note: original PRD used `full_ready` for the final state before YNS sync, this task completed it as such).
+- [ ] **Task 3a: Extend job tracking status set to include intermediate generation steps**
+    - **Objective:** Modify the backend logic (primarily within the `/api/generate` route handler after Task 3's work) to introduce and update new, more granular statuses in the `generation_jobs` table. This task specifically adds `store_skeleton_ready`, `image_processing`, and `images_resolved`. The final success status will be `store_ready`.
+    - **Detailed Steps:**
+        - After LLM Turn 2 completes and the `full_json` (with image placeholders, potentially merged with `hero_json`) is available:
+            - `UPDATE` `generation_jobs` table: set `status = 'store_skeleton_ready'`, save `full_json` (with placeholders).
+        - Before initiating image generation/selection for the placeholders in `full_json`:
+            - (Optional but recommended for UI) `UPDATE` `generation_jobs` table: set `status = 'image_processing'`.
+        - After all image placeholders in `full_json` have been processed and replaced with their final URLs (either from generation or DB lookup):
+            - `UPDATE` `generation_jobs` table: set `status = 'images_resolved'`, save the updated `full_json` (with final image URLs).
+        - After the YNS API sync is successfully completed using the `full_json` (with final image URLs):
+            - `UPDATE` `generation_jobs` table: set `status = 'store_ready'`, save `store_url`. (This replaces the previous use of `full_ready` as the terminal success state).
+        - Ensure existing error handling updates `status = 'failed'` and stores `error_msg`.
 - [x] **Task 4: New Status Endpoint (`GET /api/generate/{jobId}/status`) and minimal frontend integration**
     - Create the new Next.js API route.
     - Implement the database query to fetch job status by `jobId`.
@@ -1158,16 +1178,17 @@ The existing single main prompt file will be used, with a specific instruction a
     - Add a simple frontend component to test the new endpoint. Perhaps a simple component that displays the current status? Some kind of label or a progress bar?
 - [ ] **Task 5: Frontend Integration**
     - Update UI based on polled status:
-        - Render Hero section content when `status = 'hero_ready'`.
-        - Display a progress bar or status messages.
-        - Load the final store or show an error message upon `full_ready` or `failed`.
+        - Render Hero section content when `status = 'hero_json_ready'` (using `hero_json`).
+        - Display a progress bar or status messages for `store_skeleton_ready`, `image_processing`, and `images_resolved`. (Client could optionally use `full_json` from `store_skeleton_ready` or `images_resolved` for richer previews if desired).
+        - Load the final store using `store_url` or show an error message upon `store_ready` or `failed`.
         - Stop polling on terminal states.
 - [ ] **Task 6: Observability & Logging**
-    - Add distinct OpenTelemetry spans for "LLM Turn 1 (Hero)" and "LLM Turn 2 (Full)".
-    - Log database interaction timings for `generation_jobs` updates.
+    - Add distinct OpenTelemetry spans for "LLM Turn 1 (Hero)", "LLM Turn 2 (Full Store Skeleton)", "Image Processing Loop", and "YNS Sync".
+    - Log database interaction timings for `generation_jobs` updates for each status.
 - [ ] **Task 7: Quality Assurance**
-    - Test various scenarios: successful generation, LLM errors, network interruptions during polling or the long-lived request, browser refresh mid-process.
+    - Test various scenarios: successful generation through all new statuses, LLM errors, image processing failures, network interruptions.
     - Verify instruction obedience by the LLM and the effectiveness of the server-side Hero splicing.
+    - Verify correct status progression (`queued` -> `hero_json_ready` -> `store_skeleton_ready` -> [`image_processing` ->] `images_resolved` -> `store_ready` or `failed`) and data storage in `generation_jobs` for all intermediate steps.
 
 #### 8.8.7 Key Considerations & Risks
 
@@ -1175,13 +1196,13 @@ The existing single main prompt file will be used, with a specific instruction a
     -   **Mitigation:** The backend will parse the LLM's first response. If it contains more than just the HeroSection and basic settings, it can be treated as an error, potentially triggering a retry with more constrained parameters (e.g., `temperature=0`) or logging the anomaly. The server-side splicing of the hero from turn 1 into turn 2's full JSON acts as a final consistency guarantee.
 
 2.  **Client Handling of Dual Signals:** The client receives the final store URL via polling *and* eventually from the resolution of the original long-lived `POST` request.
-    -   **Mitigation:** The client should be designed to handle this gracefully, e.g., by acting on the first signal that indicates completion and then ignoring or aborting the other. Stopping the poll once `full_ready` or `failed` is received is crucial.
+    -   **Mitigation:** The client should be designed to handle this gracefully, e.g., by acting on the first signal that indicates completion (likely from polling `store_ready`) and then ignoring or aborting the other. Stopping the poll once `store_ready` or `failed` is received is crucial.
 
 3.  **Token Costs & Caching:** Sending the full prompt for the first (hero-only) turn might seem inefficient.
     -   **Mitigation:** Major LLM providers (like OpenAI) offer prompt caching. If the initial parts of the prompt are identical between Turn 1 and Turn 2 (which they will be in the chat history), the cost for reparsing those tokens is often waived or significantly reduced for the second call, making the overall cost increase marginal.
 
-4.  **Serverless Function Timeouts:** The entire two-turn process, including image generation, must complete within the serverless function execution limit.
-    -   **Mitigation:** Vercel's current timeout of 600 seconds for Hobby/Pro plans is well above our typical ~50-90 second total generation time. If using periodic `response.write(' ')` for keep-alive, ensure it doesn't interfere with the final JSON response of the `POST` request if not using chunked encoding deliberately. Polling makes this less of a concern for the client's perception of progress.
+4.  **Serverless Function Timeouts:** The entire multi-turn process, including image generation, must complete within the serverless function execution limit.
+    -   **Mitigation:** Vercel's current timeout of 600 seconds for Hobby/Pro plans is well above our typical ~50-90 second total generation time. Polling makes this less of a concern for the client's perception of progress for the initial steps.
 
 5.  **Database Load & Bloat:** Polling and storing intermediate JSON increases database interactions.
     -   **Mitigation:** The polling rate (1/sec) and the number of writes per job are low. `JSONB` is efficient for storing JSON. The cron job for cleaning up old `generation_jobs` records will prevent long-term bloat.
