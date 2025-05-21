@@ -54,14 +54,26 @@ export const ChatInner = ({ user }: { user: User }) => {
   // State for copy feedback
   const [isCopied, setIsCopied] = useState(false);
 
+  // New states for progressive feedback
+  const [currentJobId, setCurrentJobId] = useState<string | null>(null);
+  const [jobStatus, setJobStatus] = useState<string | null>(null);
+  const [heroPreview, setHeroPreview] = useState<{
+    heroTitle?: string;
+    heroDescription?: string;
+  } | null>(null);
+
   const handleGenerate = async () => {
     setIsLoading(true);
     setError(null);
-    setResponseJson(null); // Reset JSON state
-    setStoreUrl(null); // Reset store URL state
+    setResponseJson(null);
+    setStoreUrl(null);
     setGenerationTime(null);
+    setCurrentJobId(null);
+    setJobStatus(null);
+    setHeroPreview(null);
 
-    const jobId = crypto.randomUUID(); // Generate client-side jobId
+    const newJobId = crypto.randomUUID();
+    setCurrentJobId(newJobId);
 
     try {
       const response = await fetch('/api/generate', {
@@ -74,7 +86,7 @@ export const ChatInner = ({ user }: { user: User }) => {
           prompt,
           userId: user.id,
           imageGenerationMode,
-          jobId, // Include the generated jobId
+          jobId: newJobId,
         }),
       });
 
@@ -91,12 +103,97 @@ export const ChatInner = ({ user }: { user: User }) => {
       setResponseJson(data.storeJson);
       setStoreUrl(data.storeUrl); // Set store URL state
       setGenerationTime(data.generationTimeMs);
+      // If POST completes successfully, we can assume full_ready if not already set by polling
+      if (jobStatus !== 'full_ready') {
+        setJobStatus('full_ready');
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to generate response');
+      setJobStatus('failed');
     } finally {
       setIsLoading(false);
     }
   };
+
+  // useEffect for polling job status
+  useEffect(() => {
+    if (!currentJobId) {
+      setJobStatus(null);
+      setHeroPreview(null);
+      return;
+    }
+
+    if (jobStatus === 'full_ready' || jobStatus === 'failed') {
+      return;
+    }
+
+    // Optimistically set to 'queued' if not already set and a job ID exists
+    if (!jobStatus && currentJobId) {
+      setJobStatus('queued');
+    }
+
+    const pollingInterval = 1000; // 1 second
+
+    const intervalId = setInterval(async () => {
+      try {
+        const statusResponse = await fetch(
+          `/api/generate/${currentJobId}/status`,
+        );
+        if (!statusResponse.ok) {
+          console.error(
+            `Polling error: ${statusResponse.status} for job ${currentJobId}`,
+          );
+          // If 404 and we are in 'queued', it might just be a delay, so we don't update status yet.
+          // For other errors, or persistent 404, we might want to set a specific error or stop.
+          // For simplicity now, we let it continue polling unless a terminal state is reached.
+          if (statusResponse.status === 404 && jobStatus === 'queued') {
+            return;
+          }
+          // Optionally: if many errors, stop polling or set jobStatus to a polling_error state
+          return;
+        }
+
+        const statusData = await statusResponse.json();
+
+        if (statusData.status !== jobStatus) {
+          setJobStatus(statusData.status);
+        }
+
+        if (statusData.status === 'hero_ready' && statusData.hero_json) {
+          setHeroPreview({
+            heroTitle: statusData.hero_json.heroTitle,
+            heroDescription: statusData.hero_json.heroDescription,
+          });
+        } else if (statusData.status !== 'hero_ready') {
+          // Clear hero preview if not in hero_ready state anymore (e.g. progresses to full_ready)
+          // setHeroPreview(null); // Decided against this for now to keep hero info visible if it was shown
+        }
+
+        if (
+          statusData.status === 'full_ready' ||
+          statusData.status === 'failed'
+        ) {
+          clearInterval(intervalId);
+          if (
+            statusData.status === 'failed' &&
+            statusData.error_msg &&
+            !error
+          ) {
+            setError(statusData.error_msg); // Set error from polling if not already set by main request
+          }
+          // If main request already finished and set isLoading to false,
+          // but polling reaches terminal state later, ensure loading is false.
+          if (isLoading) {
+            setIsLoading(false);
+          }
+        }
+      } catch (pollError: any) {
+        console.error('Error during polling request:', pollError);
+      }
+    }, pollingInterval);
+
+    return () => clearInterval(intervalId);
+  }, [currentJobId, jobStatus, error, isLoading]); // Added isLoading to deps for the final check inside interval
 
   const handleCopy = () => {
     if (responseJson) {
@@ -254,13 +351,58 @@ export const ChatInner = ({ user }: { user: User }) => {
                 Generating store... <Timer />
               </span>
             )}
-            {generationTime !== null && (
-              <span className="text-sm text-gray-600">
-                Generated in {(generationTime / 1000).toFixed(2)}s
-              </span>
-            )}
+            {generationTime !== null &&
+              !isLoading && ( // Show generation time only when not loading
+                <span className="text-sm text-gray-600">
+                  Generated in {(generationTime / 1000).toFixed(2)}s
+                </span>
+              )}
           </div>
-          <div className="border rounded-md bg-gray-50 overflow-auto flex flex-col flex-1">
+          {/* New Status Display Area Start - Placed below the timer/gen time */}
+          {currentJobId &&
+            jobStatus &&
+            jobStatus !== 'full_ready' &&
+            isLoading && (
+              <div className="my-2 p-3 border rounded-md bg-gray-100 text-sm text-gray-800 shadow-sm">
+                <p className="font-semibold">
+                  Progress (Job: {currentJobId.substring(0, 8)}...):{' '}
+                  <span className="font-mono bg-gray-200 px-1 rounded">
+                    {jobStatus}
+                  </span>
+                </p>
+                {jobStatus === 'hero_ready' && heroPreview && (
+                  <div className="mt-1 pt-1 pl-2 border-l-2 border-gray-300">
+                    {heroPreview.heroTitle && (
+                      <p className="text-xs">
+                        <span className="font-medium">Hero Title:</span>{' '}
+                        {heroPreview.heroTitle}
+                      </p>
+                    )}
+                    {heroPreview.heroDescription && (
+                      <p className="text-xs">
+                        <span className="font-medium">Hero Desc:</span>{' '}
+                        {heroPreview.heroDescription}
+                      </p>
+                    )}
+                    <p className="text-xs italic mt-1 text-gray-600">
+                      Full store generation in progress...
+                    </p>
+                  </div>
+                )}
+                {jobStatus === 'queued' && (
+                  <p className="text-xs italic text-gray-600">
+                    Waiting for processing to start...
+                  </p>
+                )}
+                {jobStatus === 'failed' && error && (
+                  <p className="text-xs text-red-600">Error: {error}</p>
+                )}
+              </div>
+            )}
+          {/* New Status Display Area End */}
+          <div className="border rounded-md bg-gray-50 overflow-auto flex flex-col flex-1 mt-2">
+            {' '}
+            {/* Added mt-2 for spacing */}
             <TabsContent value="json">
               {responseJson ? (
                 <div className="grow overflow-auto mb-4">
@@ -284,7 +426,6 @@ export const ChatInner = ({ user }: { user: User }) => {
                 )
               )}
             </TabsContent>
-
             {/* Display Store URL Link Below JSON */}
             <TabsContent value="preview" className="flex flex-col flex-1">
               {storeUrl ? (
