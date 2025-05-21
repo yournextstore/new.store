@@ -64,22 +64,6 @@ function prepareHeliconeHeaders(
   return headers;
 }
 
-/**
- * Injects a default theme (global and section-specific colors) into the AI-generated JSON.
- * @param json The AI-generated JSON data.
- * @returns The JSON data with the default theme injected.
- */
-
-/**
- * Recursively traverses a JSON object/array and replaces image placeholder URLs
- * (matching `https://yns.img?description=...`) with URLs found via DB similarity search or generation.
- * Handles different image types (product, hero) and alignment requirements.
- * @param json The JSON data (or sub-part) to process.
- * @param imageMode Determines the source for PRODUCT images ('stock' or a generation API identifier).
- * @param imageStyle The image style (general style for product images consistent with the store concept).
- * @returns The modified JSON data.
- */
-
 /*
   OpenTelemetry Tracing Strategy (Current Implementation):
   We are using the `tracer.startSpan()` pattern for creating spans, followed by
