@@ -23,6 +23,8 @@ import {
   updateJobToFullReady,
 } from '../../../lib/generation-job-tracker';
 
+import { SELECTED_MODEL, MODEL_CONFIGS } from './ai-model-config'; // Added import
+
 const tracer = trace.getTracer('ai-generate-route-tracer');
 
 interface GenerationRequestContext {
@@ -34,6 +36,32 @@ interface GenerationRequestContext {
   rootSpan: Span;
   heliconeContext: HeliconeRequestContext;
   dbPool: Pool;
+}
+
+// Helper function to prepare Helicone headers
+function prepareHeliconeHeaders(
+  heliconeContext: HeliconeRequestContext,
+): Record<string, string> {
+  const headers: Record<string, string> = {}; // Initialize as empty
+
+  // These are always present in the context of this route, even if HeliconeRequestContext allows them to be optional generally
+  // However, to be safe and align with HeliconeRequestContext, we check.
+  if (typeof heliconeContext.vercelRequestId === 'string') {
+    headers['Helicone-Session-Id'] = heliconeContext.vercelRequestId;
+  }
+  // For this specific route, these are fixed values.
+  headers['Helicone-Session-Path'] = '/api/generate';
+  headers['Helicone-Session-Name'] = 'Store Generation';
+
+  if (typeof heliconeContext.userId === 'string') {
+    headers['Helicone-User-Id'] = heliconeContext.userId;
+  }
+
+  if (typeof heliconeContext.userEmail === 'string') {
+    headers['Helicone-Property-user-email'] = heliconeContext.userEmail;
+  }
+
+  return headers;
 }
 
 /**
@@ -122,29 +150,6 @@ export async function POST(req: Request) {
   let ynsApiCallTimeMs: number | null = null;
   let databaseSaveTimeMs: number | string = 'Skipped';
   let clientJobId: string | undefined = undefined;
-
-  // --- Model Selection ---
-  // Available models: 'gpt-4.1', 'gemini-2.5-flash'
-  type ModelProvider = 'openai' | 'google';
-  type ModelName = 'gpt-4.1' | 'gemini-2.5-flash';
-
-  interface ModelConfig {
-    provider: ModelProvider;
-    modelName: string;
-  }
-
-  const SELECTED_MODEL: ModelName = 'gpt-4.1';
-  const MODEL_CONFIGS: Record<ModelName, ModelConfig> = {
-    'gpt-4.1': {
-      provider: 'openai',
-      modelName: 'gpt-4.1',
-    },
-    'gemini-2.5-flash': {
-      provider: 'google',
-      modelName: 'gemini-2.5-flash-preview-04-17',
-    },
-  };
-  // --- End Model Selection ---
 
   const rootSpan: Span = tracer.startSpan('generate-store-request');
   try {
@@ -317,19 +322,9 @@ export async function POST(req: Request) {
     ); // Use context
     const overallJsonGenerationStartTime = Date.now();
 
-    const dynamicHeliconeHeaders = {
-      // Helicone-User-Id is a special header for user-level metrics in Helicone.
-      // See: https://docs.helicone.ai/features/advanced-usage/custom-properties
-      ...(context.heliconeContext.userId && {
-        'Helicone-User-Id': context.heliconeContext.userId,
-      }),
-      ...(context.heliconeContext.userEmail && {
-        'Helicone-Property-user-email': context.heliconeContext.userEmail,
-      }),
-      'Helicone-Session-Id': context.heliconeContext.vercelRequestId,
-      'Helicone-Session-Path': '/api/generate',
-      'Helicone-Session-Name': 'Store Generation',
-    };
+    const dynamicHeliconeHeaders = prepareHeliconeHeaders(
+      context.heliconeContext,
+    );
 
     // Conditional model initialization
     let modelInstance: LanguageModel;
