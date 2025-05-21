@@ -1150,12 +1150,13 @@ The existing single main prompt file will be used, with a specific instruction a
         - Execute LLM Turn 2 (Full store JSON), incorporating Hero from Turn 1.
         - Perform theme injection, image placeholder replacement, and YNS API call as currently done.
         - `UPDATE` `generation_jobs` to `status = 'full_ready'` with `full_json` and `store_url`, or to `status = 'failed'` with `error_msg` if errors occur.
-- [ ] **Task 4: New Status Endpoint (`GET /api/generate/{jobId}/status`)**
+- [ ] **Task 4: New Status Endpoint (`GET /api/generate/{jobId}/status`) and minimal frontend integration**
     - Create the new Next.js API route.
     - Implement the database query to fetch job status by `jobId`.
     - Return the status and relevant data as JSON.
-- [ ] **Task 5: Frontend Integration**
     - Implement the polling loop to call the `/status` endpoint.
+    - Add a simple frontend component to test the new endpoint. Perhaps a simple component that displays the current status? Some kind of label or a progress bar?
+- [ ] **Task 5: Frontend Integration**
     - Update UI based on polled status:
         - Render Hero section content when `status = 'hero_ready'`.
         - Display a progress bar or status messages.
