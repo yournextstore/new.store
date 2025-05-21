@@ -122,6 +122,17 @@ async function handleGenerationError({
   });
 }
 
+interface GenerationRequestContext {
+  userId: string;
+  clientJobId: string;
+  userPrompt: string;
+  userEmail: string | null;
+  imageGenerationMode: GenerationMode;
+  rootSpan: Span;
+  heliconeContext: HeliconeRequestContext;
+  dbPool: Pool;
+}
+
 /**
  * Injects a default theme (global and section-specific colors) into the AI-generated JSON.
  * @param json The AI-generated JSON data.
@@ -207,7 +218,7 @@ export async function POST(req: Request) {
   let imageReplacementTimeMs: number | null = null;
   let ynsApiCallTimeMs: number | null = null;
   let databaseSaveTimeMs: number | string = 'Skipped';
-  let clientJobId: string | undefined = undefined; // Declare clientJobId here
+  let clientJobId: string | undefined = undefined;
 
   // --- Model Selection ---
   // Available models: 'gpt-4.1', 'gemini-2.5-flash'
@@ -313,18 +324,71 @@ export async function POST(req: Request) {
 
     console.log(`Using image generation mode: ${imageGenerationMode}`);
 
+    // --- Create HeliconeRequestContext (needed for GenerationRequestContext) ---
+    const vercelRequestId =
+      requestHeadersInternal.get('x-vercel-id') || `localhost-${nanoid(10)}`;
+    const heliconeCtxForContext: HeliconeRequestContext = {
+      vercelRequestId,
+      userId: userId,
+      userEmail: userEmail === null ? undefined : userEmail,
+    };
+
+    // --- Crucial Validations before creating full context ---
+    // User prompt validation (moved up before context creation that uses it)
+    if (!userPrompt || typeof userPrompt !== 'string') {
+      return handleGenerationError({
+        error: new Error('Prompt is required and must be a string'),
+        span: rootSpan,
+        jobId: clientJobId, // clientJobId is validated by this point
+        dbPool: pool,
+        responseDetails: {
+          clientMessage: 'Prompt is required and must be a string',
+          statusCode: 400,
+          dbErrorMessage: 'Prompt is required and must be a string',
+        },
+        operationContext: 'Validating userPrompt (pre-context)',
+      });
+    }
+
+    // User ID validation (moved up before context creation that uses it)
+    if (!userId || typeof userId !== 'string') {
+      return handleGenerationError({
+        error: new Error('User ID is required and must be a string'),
+        span: rootSpan,
+        jobId: clientJobId, // clientJobId is validated
+        dbPool: pool,
+        responseDetails: {
+          clientMessage: 'User ID is required and must be a string',
+          statusCode: 400,
+          dbErrorMessage: 'User ID is required and must be a string',
+        },
+        operationContext: 'Validating userId (pre-context)',
+      });
+    }
+    // Now all components of context are validated and ready.
+    const context: GenerationRequestContext = {
+      userId: userId,
+      clientJobId: clientJobId,
+      userPrompt: userPrompt,
+      userEmail: userEmail,
+      imageGenerationMode: imageGenerationMode,
+      rootSpan: rootSpan,
+      heliconeContext: heliconeCtxForContext,
+      dbPool: pool,
+    };
+
     // --- Initialize job in database ---
     let dbClient: PoolClient | null = null;
     try {
-      dbClient = await pool.connect();
+      dbClient = await context.dbPool.connect();
       await dbClient.query(
         `INSERT INTO generation_jobs (id, user_id, status, created_at, updated_at)
          VALUES ($1, $2, 'queued', NOW(), NOW())`,
-        [clientJobId, userId],
+        [context.clientJobId, context.userId],
       );
       console.log(
         'Job with status "queued" inserted into database:',
-        clientJobId,
+        context.clientJobId,
       );
     } catch (dbError) {
       // Job ID is known, but the job itself failed to initialize in DB.
@@ -332,9 +396,8 @@ export async function POST(req: Request) {
       // handleGenerationError will attempt to log to span and console.
       return handleGenerationError({
         error: dbError,
-        span: rootSpan,
-        // No jobId to update in DB as insert failed
-        dbPool: pool,
+        span: context.rootSpan, // Use context
+        dbPool: context.dbPool, // Use context
         responseDetails: {
           clientMessage:
             'Internal Server Error: Failed to initialize job tracking',
@@ -351,43 +414,16 @@ export async function POST(req: Request) {
     }
     // --- End Initialize job in database ---
 
-    if (!userPrompt || typeof userPrompt !== 'string') {
-      return handleGenerationError({
-        error: new Error('Prompt is required and must be a string'),
-        span: rootSpan,
-        jobId: clientJobId,
-        dbPool: pool,
-        responseDetails: {
-          clientMessage: 'Prompt is required and must be a string',
-          statusCode: 400,
-          dbErrorMessage: 'Prompt is required and must be a string',
-        },
-        operationContext: 'Validating userPrompt',
-      });
-    }
-
-    if (!userId || typeof userId !== 'string') {
-      return handleGenerationError({
-        error: new Error('User ID is required and must be a string'),
-        span: rootSpan,
-        jobId: clientJobId, // Assuming we want to fail the job if userId is bad after job init
-        dbPool: pool,
-        responseDetails: {
-          clientMessage: 'User ID is required and must be a string',
-          statusCode: 400,
-          dbErrorMessage: 'User ID is required and must be a string',
-        },
-        operationContext: 'Validating userId',
-      });
-    }
-
-    // Check that {user_prompt} is present in the prototypePrompt
+    // Check that {user_prompt} is present in the prototypePrompt (uses context.userPrompt indirectly via fullPrompt)
     if (!prototypePrompt.includes('{user_prompt}')) {
+      console.error(
+        'Critical Error: Prompt placeholder {user_prompt} not found in gen-store-json-prompt.md',
+      );
       return handleGenerationError({
         error: new Error('Prompt placeholder {user_prompt} not found'),
-        span: rootSpan,
-        jobId: clientJobId,
-        dbPool: pool,
+        span: context.rootSpan, // Use context
+        jobId: context.clientJobId, // Use context
+        dbPool: context.dbPool, // Use context
         responseDetails: {
           clientMessage: 'Internal Server Error: Invalid prompt configuration',
           statusCode: 500,
@@ -398,33 +434,22 @@ export async function POST(req: Request) {
       });
     }
 
-    // Construct the full prompt for the AI
-    const fullPrompt = prototypePrompt.replace('{user_prompt}', userPrompt);
-
-    // Define Helicone Context
-    const vercelRequestId =
-      requestHeadersInternal.get('x-vercel-id') || `localhost-${nanoid(10)}`;
-    const heliconeContext: HeliconeRequestContext = {
-      vercelRequestId,
-      userId,
-      userEmail: userEmail === null ? undefined : userEmail,
-    };
-
-    const overallJsonGenerationStartTime = Date.now(); // Start for total JSON generation
-
-    // Prepare dynamic Helicone headers
-    const vercelIdForHeliconeSession = heliconeContext.vercelRequestId;
+    const fullPrompt = prototypePrompt.replace(
+      '{user_prompt}',
+      context.userPrompt,
+    ); // Use context
+    const overallJsonGenerationStartTime = Date.now();
 
     const dynamicHeliconeHeaders = {
       // Helicone-User-Id is a special header for user-level metrics in Helicone.
       // See: https://docs.helicone.ai/features/advanced-usage/custom-properties
-      ...(heliconeContext.userId && {
-        'Helicone-User-Id': heliconeContext.userId,
+      ...(context.heliconeContext.userId && {
+        'Helicone-User-Id': context.heliconeContext.userId,
       }),
-      ...(heliconeContext.userEmail && {
-        'Helicone-Property-user-email': heliconeContext.userEmail,
+      ...(context.heliconeContext.userEmail && {
+        'Helicone-Property-user-email': context.heliconeContext.userEmail,
       }),
-      'Helicone-Session-Id': vercelIdForHeliconeSession,
+      'Helicone-Session-Id': context.heliconeContext.vercelRequestId,
       'Helicone-Session-Path': '/api/generate',
       'Helicone-Session-Name': 'Store Generation',
     };
@@ -457,7 +482,6 @@ export async function POST(req: Request) {
       throw new Error(`Unsupported model provider: ${modelConfig.provider}`);
     }
 
-    // log calling the selected model
     console.log(
       `Calling ${selectedModelLogName} model with the full prompt for Turn 1 (Hero Content)...`,
     );
@@ -504,9 +528,9 @@ export async function POST(req: Request) {
       console.error('Raw AI Response (Turn 1):', heroContentText);
       return handleGenerationError({
         error: parseError,
-        span: rootSpan,
-        jobId: clientJobId,
-        dbPool: pool,
+        span: context.rootSpan, // Use context
+        jobId: context.clientJobId, // Use context
+        dbPool: context.dbPool, // Use context
         responseDetails: {
           clientMessage: 'Failed to parse AI response for hero content',
           statusCode: 500,
@@ -523,29 +547,24 @@ export async function POST(req: Request) {
     // TODO: Later, save heroContentTurn1 to generation_jobs table with status 'hero_ready'
     // --- Update job status to hero_ready ---
     try {
-      dbClient = await pool.connect();
+      dbClient = await context.dbPool.connect(); // Use context
       await dbClient.query(
         `UPDATE generation_jobs SET status = 'hero_ready', hero_json = $1, updated_at = NOW()
          WHERE id = $2`,
-        [JSON.stringify(heroContentTurn1), clientJobId], // Store heroContentTurn1 as hero_json
+        [JSON.stringify(heroContentTurn1), context.clientJobId], // Use context
       );
       console.log(
         'Job with status "hero_ready" updated in database:',
-        clientJobId,
-      );
+        context.clientJobId,
+      ); // Use context
     } catch (dbError) {
       console.error(
         'Failed to update job status to hero_ready in database:',
         dbError,
       );
-      if (dbError instanceof Error) {
-        rootSpan.recordException(dbError);
-      } else {
-        rootSpan.recordException(new Error(String(dbError)));
-      }
-      // Log error, but proceed. The final status update will capture overall success/failure.
-      // Or, decide if this is critical enough to halt and set job to 'failed'.
-      // For now, logging and continuing.
+      if (dbError instanceof Error)
+        context.rootSpan.recordException(dbError); // Use context
+      else context.rootSpan.recordException(new Error(String(dbError))); // Use context
     } finally {
       dbClient?.release();
     }
@@ -670,10 +689,10 @@ Ensure the entire output is a single, valid JSON object. Remember to output ONLY
     const startTimeReplace = Date.now();
     // imageStyle is already extracted from the original generatedJson
     const finalJson = await replaceImagePlaceholders(
-      themedJson, // Use the JSON with themes injected
-      imageGenerationMode,
-      imageStyle, // Pass the original imageStyle
-      heliconeContext, // Pass the context here
+      themedJson,
+      context.imageGenerationMode, // Use context
+      imageStyle,
+      context.heliconeContext, // Use context
     );
     const endTimeReplace = Date.now();
     imageReplacementTimeMs = endTimeReplace - startTimeReplace; // Calculate duration
@@ -741,9 +760,9 @@ Ensure the entire output is a single, valid JSON object. Remember to output ONLY
         console.error('YNS API Error:', ynsResponse.status, errorBody);
         return handleGenerationError({
           error: new Error(`YNS API Error: ${ynsResponse.status} ${errorBody}`),
-          span: rootSpan,
-          jobId: clientJobId,
-          dbPool: pool,
+          span: context.rootSpan, // Use context
+          jobId: context.clientJobId, // Use context
+          dbPool: context.dbPool, // Use context
           responseDetails: {
             clientMessage: `Failed to create store on YNS platform (Status: ${ynsResponse.status})`,
             statusCode: ynsResponse.status, // Forward YNS status code
@@ -762,24 +781,24 @@ Ensure the entire output is a single, valid JSON object. Remember to output ONLY
 
       if (!heroImageUrlToSave) {
         console.error(
-          `Hero image URL could not be extracted for store generation (User: ${userId}, Prompt: "${userPrompt.substring(0, 50)}..."). Skipping database entry for generated_stores.`,
+          `Hero image URL could not be extracted for store generation (User: ${context.userId}, Prompt: "${context.userPrompt.substring(0, 50)}..."). Skipping database entry for generated_stores.`,
         );
-      } else if (pool) {
-        // Proceed only if heroImageUrlToSave is not null AND pool is available
-        let dbClient: PoolClient | undefined;
+      } else if (context.dbPool) {
+        // Use context
+        let dbClientForStoreSave: PoolClient | undefined;
         try {
-          dbClient = await pool.connect();
+          dbClientForStoreSave = await context.dbPool.connect(); // Use context
           const insertQuery = `
               INSERT INTO generated_stores (user_id, user_email, prompt_text, store_url, hero_image_url, final_store_json)
               VALUES ($1, $2, $3, $4, $5, $6) RETURNING id;
             `;
           const startTimeDbSave = Date.now();
-          const result = await dbClient.query(insertQuery, [
-            userId,
-            userEmail,
-            userPrompt,
+          const result = await dbClientForStoreSave.query(insertQuery, [
+            context.userId, // Use context
+            context.userEmail, // Use context
+            context.userPrompt, // Use context
             storeUrl,
-            heroImageUrlToSave, // Now guaranteed to be a string
+            heroImageUrlToSave,
             JSON.stringify(finalJson),
           ]);
           const endTimeDbSave = Date.now();
@@ -787,7 +806,7 @@ Ensure the entire output is a single, valid JSON object. Remember to output ONLY
 
           const newEntryId = result.rows[0]?.id;
           console.log(
-            `Successfully saved generated store metadata for user ${userId} (Email: ${userEmail}). URL: ${storeUrl}. DB Entry ID: ${newEntryId}`,
+            `Successfully saved generated store metadata for user ${context.userId} (Email: ${context.userEmail}). URL: ${storeUrl}. DB Entry ID: ${newEntryId}`,
           );
         } catch (dbError: any) {
           // Explicitly type dbError
@@ -797,41 +816,37 @@ Ensure the entire output is a single, valid JSON object. Remember to output ONLY
           );
           // Logged error, proceed to return success to user for store generation
         } finally {
-          dbClient?.release();
+          dbClientForStoreSave?.release();
         }
-      } else if (!pool) {
-        // heroImageUrlToSave was valid, but pool is not available
+      } else if (!context.dbPool) {
+        // Use context
         console.error(
           'Database pool not available. Skipping save of generated store metadata.',
         );
       }
-      // --- End Save to generated_stores table ---
 
-      // --- Update job status to full_ready ---
-      if (clientJobId) {
+      if (context.clientJobId) {
+        // Use context
         try {
-          dbClient = await pool.connect();
+          dbClient = await context.dbPool.connect(); // Use context
           await dbClient.query(
             `UPDATE generation_jobs
              SET status = 'full_ready', full_json = $1, store_url = $2, updated_at = NOW()
              WHERE id = $3`,
-            [JSON.stringify(finalJson), storeUrl, clientJobId],
+            [JSON.stringify(finalJson), storeUrl, context.clientJobId], // Use context
           );
           console.log(
             'Job with status "full_ready" updated in database:',
-            clientJobId,
-          );
+            context.clientJobId,
+          ); // Use context
         } catch (dbError) {
           console.error(
             'Failed to update job status to full_ready in database:',
             dbError,
           );
-          if (dbError instanceof Error) {
-            rootSpan.recordException(dbError);
-          } else {
-            rootSpan.recordException(new Error(String(dbError)));
-          }
-          // Log error. The client will still get the response, but job status might be inconsistent.
+          if (dbError instanceof Error)
+            context.rootSpan.recordException(dbError); // Use context
+          else context.rootSpan.recordException(new Error(String(dbError))); // Use context
         } finally {
           dbClient?.release();
         }
@@ -840,17 +855,16 @@ Ensure the entire output is a single, valid JSON object. Remember to output ONLY
 
       // --- Latency Summary Logging ---
       const logIdentifier =
-        userEmail || `User ID: ${userId}` || 'Unknown User/ID';
+        context.userEmail || `User ID: ${context.userId}` || 'Unknown User/ID'; // Use context
       const formatMs = (ms: number | string | null) => {
         if (typeof ms === 'string') return ms;
         if (ms === null) return 'Not executed or failed';
         return `${ms.toLocaleString('en-US')}ms`;
       };
-
       console.log(`
 Latency Summary for Request (User: ${logIdentifier}):
 - AI Text Generation: ${formatMs(llmTextGenerationTimeMs)}
-- Image Processing (${imageGenerationMode}): ${formatMs(imageReplacementTimeMs)}
+- Image Processing (${context.imageGenerationMode}): ${formatMs(imageReplacementTimeMs)} 
 - YNS API Call: ${formatMs(ynsApiCallTimeMs)}
 - Database Save: ${formatMs(databaseSaveTimeMs)}
 `);
@@ -865,9 +879,9 @@ Latency Summary for Request (User: ${logIdentifier}):
     } catch (ynsApiError) {
       return handleGenerationError({
         error: ynsApiError,
-        span: rootSpan,
-        jobId: clientJobId,
-        dbPool: pool,
+        span: context.rootSpan, // Use context
+        jobId: context.clientJobId, // Use context
+        dbPool: context.dbPool, // Use context
         responseDetails: {
           clientMessage: 'Failed to communicate with YNS platform',
           statusCode: 500,
@@ -878,15 +892,12 @@ Latency Summary for Request (User: ${logIdentifier}):
     }
     // --- End YNS API Call ---
   } catch (error: any) {
-    // Safely access clientJobId which should be defined if this outer try block is reached
-    // It might be undefined if an error occurs before `const body = await req.json();`
-    // and `const clientJobId = body.jobId;` can be successfully executed.
-    // The handleGenerationError function is designed to handle cases where jobId might be undefined.
-    // We use `clientJobId` which is in scope from the main try block.
+    // For this top-level catch, context may not be initialized if an error occurred very early.
+    // Thus, we use rootSpan, clientJobId (if available from request parsing), and global pool directly.
     return handleGenerationError({
       error: error,
       span: rootSpan,
-      jobId: clientJobId, // Now correctly scoped, can be undefined if error happened before assignment
+      jobId: clientJobId, // This is the clientJobId from the request body, might be undefined if error before its assignment
       dbPool: pool,
       responseDetails: {
         clientMessage: 'Internal Server Error',
