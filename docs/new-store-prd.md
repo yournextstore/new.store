@@ -1158,7 +1158,7 @@ The existing single main prompt file will be used, with a specific instruction a
         - Execute LLM Turn 2 (Full store JSON), incorporating Hero from Turn 1.
         - Perform theme injection, image placeholder replacement, and YNS API call as currently done.
         - `UPDATE` `generation_jobs` to `status = 'full_ready'` with `full_json` and `store_url`, or to `status = 'failed'` with `error_msg` if errors occur. (Note: original PRD used `full_ready` for the final state before YNS sync, this task completed it as such).
-- [ ] **Task 3a: Extend job tracking status set to include intermediate generation steps**
+- [x] **Task 3a: Extend job tracking status set to include intermediate generation steps**
     - **Objective:** Modify the backend logic (primarily within the `/api/generate` route handler after Task 3's work) to introduce and update new, more granular statuses in the `generation_jobs` table. This task specifically adds `store_skeleton_ready`, `image_processing`, and `images_resolved`. The final success status will be `store_ready`.
     - **Detailed Steps:**
         - After LLM Turn 2 completes and the `full_json` (with image placeholders, potentially merged with `hero_json`) is available:
