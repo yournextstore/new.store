@@ -10,6 +10,9 @@ import { useEffect, useState } from 'react';
 import SyntaxHighlighter from 'react-syntax-highlighter';
 import { okaidia } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
+// Import the GenerationJobStatus type
+import type { GenerationJobStatus } from '@/lib/generation-job-tracker'; // Using @ alias
+
 const Timer = () => {
   const [start, setStart] = useState(0);
   const [time, setTime] = useState(0);
@@ -56,7 +59,7 @@ export const ChatInner = ({ user }: { user: User }) => {
 
   // New states for progressive feedback
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
-  const [jobStatus, setJobStatus] = useState<string | null>(null);
+  const [jobStatus, setJobStatus] = useState<GenerationJobStatus | null>(null);
   const [heroPreview, setHeroPreview] = useState<{
     heroTitle?: string;
     heroDescription?: string;
@@ -103,9 +106,9 @@ export const ChatInner = ({ user }: { user: User }) => {
       setResponseJson(data.storeJson);
       setStoreUrl(data.storeUrl); // Set store URL state
       setGenerationTime(data.generationTimeMs);
-      // If POST completes successfully, we can assume full_ready if not already set by polling
-      if (jobStatus !== 'full_ready') {
-        setJobStatus('full_ready');
+      // If POST completes successfully, we can assume store_ready if not already set by polling
+      if (jobStatus !== 'store_ready') {
+        setJobStatus('store_ready');
       }
     } catch (err: any) {
       setError(err.message || 'Failed to generate response');
@@ -123,7 +126,7 @@ export const ChatInner = ({ user }: { user: User }) => {
       return;
     }
 
-    if (jobStatus === 'full_ready' || jobStatus === 'failed') {
+    if (jobStatus === 'store_ready' || jobStatus === 'failed') {
       return;
     }
 
@@ -156,7 +159,7 @@ export const ChatInner = ({ user }: { user: User }) => {
         const statusData = await statusResponse.json();
 
         if (statusData.status !== jobStatus) {
-          setJobStatus(statusData.status);
+          setJobStatus(statusData.status as GenerationJobStatus);
         }
 
         if (statusData.status === 'hero_ready' && statusData.hero_json) {
@@ -165,12 +168,12 @@ export const ChatInner = ({ user }: { user: User }) => {
             heroDescription: statusData.hero_json.heroDescription,
           });
         } else if (statusData.status !== 'hero_ready') {
-          // Clear hero preview if not in hero_ready state anymore (e.g. progresses to full_ready)
+          // Clear hero preview if not in hero_ready state anymore (e.g. progresses to store_ready)
           // setHeroPreview(null); // Decided against this for now to keep hero info visible if it was shown
         }
 
         if (
-          statusData.status === 'full_ready' ||
+          statusData.status === 'store_ready' ||
           statusData.status === 'failed'
         ) {
           clearInterval(intervalId);
@@ -361,7 +364,7 @@ export const ChatInner = ({ user }: { user: User }) => {
           {/* New Status Display Area Start - Placed below the timer/gen time */}
           {currentJobId &&
             jobStatus &&
-            jobStatus !== 'full_ready' &&
+            jobStatus !== 'store_ready' &&
             isLoading && (
               <div className="my-2 p-3 border rounded-md bg-gray-100 text-sm text-gray-800 shadow-sm">
                 <p className="font-semibold">

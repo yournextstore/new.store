@@ -76,7 +76,7 @@ $$ LANGUAGE plpgsql;
 CREATE TABLE generation_jobs (
   id            UUID PRIMARY KEY, -- Client-generated UUIDv4, used as jobId
   user_id       TEXT NOT NULL,    -- Identifies the user initiating the request
-  status        TEXT NOT NULL CHECK (status IN ('queued', 'hero_ready', 'full_ready', 'failed')),
+  status        TEXT NOT NULL CHECK (status IN ('queued', 'hero_ready', 'store_skeleton_ready', 'image_processing', 'images_resolved', 'store_ready', 'failed')),
   hero_json     JSONB,            -- Stores the JSON for the Hero section (nullable)
   full_json     JSONB,            -- Stores the complete store JSON (nullable)
   store_url     TEXT,             -- URL of the generated store (set at 'full_ready', nullable)

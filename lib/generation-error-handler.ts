@@ -28,6 +28,7 @@ import { NextResponse } from 'next/server';
 import type { Span } from '@opentelemetry/api';
 import { SpanStatusCode } from '@opentelemetry/api';
 import type { Pool, PoolClient } from 'pg';
+import type { GenerationJobStatus } from './generation-job-tracker';
 
 export interface HandleGenerationErrorParams {
   error: any;
@@ -78,13 +79,14 @@ export async function handleGenerationError({
       const dbErrorMsgToStore = (
         responseDetails.dbErrorMessage || errorMessage
       ).substring(0, 1000);
+      const failedStatus: GenerationJobStatus = 'failed';
       await dbClientForUpdate.query(
-        `UPDATE generation_jobs SET status = 'failed', error_msg = $1, updated_at = NOW()
-         WHERE id = $2`,
-        [dbErrorMsgToStore, jobId],
+        `UPDATE generation_jobs SET status = $1, error_msg = $2, updated_at = NOW()
+         WHERE id = $3`,
+        [failedStatus, dbErrorMsgToStore, jobId],
       );
       console.log(
-        `Job ${jobId} status updated to 'failed' in DB due to error in ${operationContext}.`,
+        `Job ${jobId} status updated to '${failedStatus}' in DB due to error in ${operationContext}.`,
       );
     } catch (dbUpdateError) {
       const dbUpdateErrorMessage =

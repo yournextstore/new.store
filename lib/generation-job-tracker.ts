@@ -30,6 +30,16 @@
 import type { Pool, PoolClient } from 'pg';
 import type { Span } from '@opentelemetry/api';
 
+// this enum should be in sync with the status column in the generation_jobs table; see @db_schema.sql for details
+export type GenerationJobStatus =
+  | 'queued'
+  | 'hero_ready'
+  | 'store_skeleton_ready'
+  | 'image_processing'
+  | 'images_resolved'
+  | 'store_ready'
+  | 'failed';
+
 // Renaming to be exported and used by other modules if necessary, removing underscore
 export async function initializeJob(
   dbPool: Pool,
@@ -38,14 +48,15 @@ export async function initializeJob(
   span?: Span,
 ): Promise<void> {
   let dbClient: PoolClient | null = null;
+  const status: GenerationJobStatus = 'queued';
   try {
     dbClient = await dbPool.connect();
     await dbClient.query(
       `INSERT INTO generation_jobs (id, user_id, status, created_at, updated_at)
-       VALUES ($1, $2, 'queued', NOW(), NOW())`,
-      [jobId, userId],
+       VALUES ($1, $2, $3, NOW(), NOW())`,
+      [jobId, userId, status],
     );
-    console.log('Job with status "queued" inserted into database:', jobId);
+    console.log(`Job with status "${status}" inserted into database:`, jobId);
   } catch (dbError) {
     const errorMessage =
       dbError instanceof Error ? dbError.message : String(dbError);
@@ -70,14 +81,15 @@ export async function updateJobToHeroReady(
   span?: Span,
 ): Promise<void> {
   let dbClient: PoolClient | null = null;
+  const status: GenerationJobStatus = 'hero_ready';
   try {
     dbClient = await dbPool.connect();
     await dbClient.query(
-      `UPDATE generation_jobs SET status = 'hero_ready', hero_json = $1, updated_at = NOW()
-       WHERE id = $2`,
-      [JSON.stringify(heroJson), jobId],
+      `UPDATE generation_jobs SET status = $1, hero_json = $2, updated_at = NOW()
+       WHERE id = $3`,
+      [status, JSON.stringify(heroJson), jobId],
     );
-    console.log('Job with status "hero_ready" updated in database:', jobId);
+    console.log(`Job with status "${status}" updated in database:`, jobId);
   } catch (dbError) {
     const errorMessage =
       dbError instanceof Error ? dbError.message : String(dbError);
@@ -94,34 +106,129 @@ export async function updateJobToHeroReady(
   }
 }
 
-export async function updateJobToFullReady(
+export async function updateJobToStoreSkeletonReady(
   dbPool: Pool,
   jobId: string,
-  fullJson: any,
-  storeUrl: string,
+  fullJsonWithPlaceholders: any,
   span?: Span,
 ): Promise<void> {
   let dbClient: PoolClient | null = null;
+  const status: GenerationJobStatus = 'store_skeleton_ready';
   try {
     dbClient = await dbPool.connect();
     await dbClient.query(
-      `UPDATE generation_jobs
-       SET status = 'full_ready', full_json = $1, store_url = $2, updated_at = NOW()
+      `UPDATE generation_jobs SET status = $1, full_json = $2, updated_at = NOW()
        WHERE id = $3`,
-      [JSON.stringify(fullJson), storeUrl, jobId],
+      [status, JSON.stringify(fullJsonWithPlaceholders), jobId],
     );
-    console.log('Job with status "full_ready" updated in database:', jobId);
+    console.log(`Job with status "${status}" updated in database:`, jobId);
   } catch (dbError) {
     const errorMessage =
       dbError instanceof Error ? dbError.message : String(dbError);
     console.error(
-      `Failed to update job ${jobId} status to full_ready in database:`,
+      `Failed to update job ${jobId} status to store_skeleton_ready in database:`,
       errorMessage,
     );
     span?.recordException(
       dbError instanceof Error ? dbError : new Error(errorMessage),
     );
-    span?.setAttribute('db.updateJobToFullReady.error', true);
+    span?.setAttribute('db.updateJobToStoreSkeletonReady.error', true);
+  } finally {
+    dbClient?.release();
+  }
+}
+
+export async function updateJobToImageProcessing(
+  dbPool: Pool,
+  jobId: string,
+  span?: Span,
+): Promise<void> {
+  let dbClient: PoolClient | null = null;
+  const status: GenerationJobStatus = 'image_processing';
+  try {
+    dbClient = await dbPool.connect();
+    await dbClient.query(
+      `UPDATE generation_jobs SET status = $1, updated_at = NOW()
+       WHERE id = $2`,
+      [status, jobId],
+    );
+    console.log(`Job with status "${status}" updated in database:`, jobId);
+  } catch (dbError) {
+    const errorMessage =
+      dbError instanceof Error ? dbError.message : String(dbError);
+    console.error(
+      `Failed to update job ${jobId} status to image_processing in database:`,
+      errorMessage,
+    );
+    span?.recordException(
+      dbError instanceof Error ? dbError : new Error(errorMessage),
+    );
+    span?.setAttribute('db.updateJobToImageProcessing.error', true);
+  } finally {
+    dbClient?.release();
+  }
+}
+
+export async function updateJobToImagesResolved(
+  dbPool: Pool,
+  jobId: string,
+  fullJsonWithResolvedUrls: any,
+  span?: Span,
+): Promise<void> {
+  let dbClient: PoolClient | null = null;
+  const status: GenerationJobStatus = 'images_resolved';
+  try {
+    dbClient = await dbPool.connect();
+    await dbClient.query(
+      `UPDATE generation_jobs SET status = $1, full_json = $2, updated_at = NOW()
+       WHERE id = $3`,
+      [status, JSON.stringify(fullJsonWithResolvedUrls), jobId],
+    );
+    console.log(`Job with status "${status}" updated in database:`, jobId);
+  } catch (dbError) {
+    const errorMessage =
+      dbError instanceof Error ? dbError.message : String(dbError);
+    console.error(
+      `Failed to update job ${jobId} status to images_resolved in database:`,
+      errorMessage,
+    );
+    span?.recordException(
+      dbError instanceof Error ? dbError : new Error(errorMessage),
+    );
+    span?.setAttribute('db.updateJobToImagesResolved.error', true);
+  } finally {
+    dbClient?.release();
+  }
+}
+
+export async function updateJobToStoreReady(
+  dbPool: Pool,
+  jobId: string,
+  storeUrl: string,
+  span?: Span,
+): Promise<void> {
+  let dbClient: PoolClient | null = null;
+  const status: GenerationJobStatus = 'store_ready';
+  try {
+    dbClient = await dbPool.connect();
+    await dbClient.query(
+      `UPDATE generation_jobs
+       SET status = $1, store_url = $2, updated_at = NOW()
+       WHERE id = $3`,
+      [status, storeUrl, jobId],
+    );
+    console.log(`Job with status "${status}" updated in database:`, jobId);
+  } catch (dbError) {
+    const errorMessage =
+      dbError instanceof Error ? dbError.message : String(dbError);
+    console.error(
+      `Failed to update job ${jobId} status to store_ready in database:`,
+      errorMessage,
+    );
+    span?.recordException(
+      dbError instanceof Error ? dbError : new Error(errorMessage),
+    );
+    span?.setAttribute('db.updateJobToStoreReady.error', true);
   } finally {
     dbClient?.release();
   }

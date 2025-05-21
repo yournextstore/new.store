@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { generateText, type LanguageModel } from 'ai';
 import { heliconeOpenAI, heliconeGoogle } from '../../lib/ai-providers';
-import { trace, type Span } from '@opentelemetry/api';
+import { trace, type Span, SpanStatusCode } from '@opentelemetry/api';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import util from 'node:util';
@@ -20,7 +20,10 @@ import { handleGenerationError } from '../../../lib/generation-error-handler';
 import {
   initializeJob,
   updateJobToHeroReady,
-  updateJobToFullReady,
+  updateJobToStoreSkeletonReady,
+  updateJobToImageProcessing,
+  updateJobToImagesResolved,
+  updateJobToStoreReady,
 } from '../../../lib/generation-job-tracker';
 
 import { SELECTED_MODEL, MODEL_CONFIGS } from './ai-model-config'; // Added import
@@ -455,37 +458,52 @@ Ensure the entire output is a single, valid JSON object. Remember to output ONLY
     // TODO: Later, implement the backend safety-net check/override for heroTitle/Description here.
     // For now, we assume the LLM correctly incorporates them.
 
-    // Parse the AI's response as JSON (this is now from Turn 2)
-    let generatedJson: unknown;
+    // At this point, 'text' contains the full store JSON with image placeholders
+    // It might have been modified by the safety-net check for hero content (TODO for that check)
+    // For now, we assume 'text' is the string representation of full_json with placeholders
+
+    let generatedJsonWithPlaceholders: unknown;
     try {
-      // Attempt to remove markdown fences if present
       const cleanedText = text
         .trim()
         .replace(/^```json\s*/, '')
         .replace(/\s*```$/, '');
-      generatedJson = JSON.parse(cleanedText);
+      generatedJsonWithPlaceholders = JSON.parse(cleanedText);
     } catch (parseError) {
-      console.error('JSON Parsing Error:', parseError);
-      console.error('Raw AI Response:', text); // Log the raw text for debugging
+      console.error(
+        'LLM Turn 2 JSON Parsing Error (full store with placeholders):',
+        parseError,
+      );
+      console.error('Raw AI Response (Turn 2):', text);
       return handleGenerationError({
         error: parseError,
-        span: rootSpan,
-        jobId: clientJobId,
-        dbPool: pool,
+        span: context.rootSpan,
+        jobId: context.clientJobId,
+        dbPool: context.dbPool,
         responseDetails: {
-          clientMessage: 'Failed to parse AI response for full store JSON',
+          clientMessage:
+            'Failed to parse AI response (JSON) for full store structure',
           statusCode: 500,
-          dbErrorMessage: `Failed to parse AI response as JSON: ${parseError instanceof Error ? parseError.message : String(parseError)}`,
+          dbErrorMessage: `Failed to parse LLM Turn 2 response (full store with placeholders): ${parseError instanceof Error ? parseError.message : String(parseError)}`,
           rawResponse: text,
         },
-        operationContext: 'Parsing LLM Turn 2 (Full Store JSON)',
+        operationContext:
+          'Parsing LLM Turn 2 (Full Store JSON with placeholders)',
       });
     }
 
-    // Log the raw JSON from AI before any modifications
+    // Update job to store_skeleton_ready
+    await updateJobToStoreSkeletonReady(
+      context.dbPool,
+      context.clientJobId,
+      generatedJsonWithPlaceholders, // This is the parsed full_json with placeholders
+      context.rootSpan,
+    );
+
+    // Log the raw JSON from AI before any modifications like theme injection
     console.log(
       'Raw JSON from AI (before theme injection):',
-      util.inspect(generatedJson, {
+      util.inspect(generatedJsonWithPlaceholders, {
         showHidden: false,
         depth: null,
         colors: true,
@@ -493,16 +511,15 @@ Ensure the entire output is a single, valid JSON object. Remember to output ONLY
     );
 
     // Extract imageStyle from the original AI output, as it's independent of theme injection.
-    const imageStyle = (generatedJson as any)?.settings?.imageStyle as
-      | string
-      | undefined;
+    const imageStyle = (generatedJsonWithPlaceholders as any)?.settings
+      ?.imageStyle as string | undefined;
     console.log(
       'Extracted imageStyle from settings:',
       imageStyle ?? 'Not Found',
     );
 
     // Extract chosenPaletteName from the AI output
-    const chosenPaletteName = (generatedJson as any)?.settings
+    const chosenPaletteName = (generatedJsonWithPlaceholders as any)?.settings
       ?.chosenPaletteName as string | undefined | null;
     console.log(
       'Extracted chosenPaletteName from settings:',
@@ -510,38 +527,91 @@ Ensure the entire output is a single, valid JSON object. Remember to output ONLY
     );
 
     // Apply the chosen or default theme
-    const themedJson = applyTheme(generatedJson, chosenPaletteName);
-
-    // Log the JSON AFTER theme injection
+    const themeAppliedJson = applyTheme(
+      generatedJsonWithPlaceholders,
+      chosenPaletteName,
+    );
     console.log(
-      'JSON after theme injection (before image replacement):',
-      util.inspect(themedJson, {
+      'JSON after theme injection:',
+      util.inspect(themeAppliedJson, {
         showHidden: false,
         depth: null,
         colors: true,
       }),
     );
 
-    // --- Replace Image Placeholders ---
-    console.log('Replacing image placeholders...');
-    const startTimeReplace = Date.now();
-    // imageStyle is already extracted from the original generatedJson
-    const finalJson = await replaceImagePlaceholders(
-      themedJson,
-      context.imageGenerationMode, // Use context
-      imageStyle,
-      context.heliconeContext, // Use context
+    // --- Image Placeholder Replacement ---
+    const imageReplacementStartTime = Date.now();
+    let finalJsonWithImages: any;
+
+    // Update job to image_processing before starting image replacement
+    await updateJobToImageProcessing(
+      context.dbPool,
+      context.clientJobId,
+      context.rootSpan,
     );
-    const endTimeReplace = Date.now();
-    imageReplacementTimeMs = endTimeReplace - startTimeReplace; // Calculate duration
-    console.log(`Image replacement took ${imageReplacementTimeMs}ms`);
-    // --- End Image Placeholder Replacement ---
 
-    const overallJsonGenerationEndTime = Date.now(); // End for total JSON generation
-    const totalJsonGenerationTimeMs =
-      overallJsonGenerationEndTime - overallJsonGenerationStartTime;
+    try {
+      finalJsonWithImages = await tracer.startActiveSpan(
+        'replaceImagePlaceholders-operation',
+        async (replaceSpan) => {
+          try {
+            const result = await replaceImagePlaceholders(
+              themeAppliedJson,
+              context.imageGenerationMode,
+              imageStyle, // Pass the extracted imageStyle. This can be string | null | undefined
+              context.heliconeContext,
+            );
+            replaceSpan.setStatus({ code: SpanStatusCode.OK });
+            return result;
+          } catch (imageError) {
+            replaceSpan.recordException(imageError as Error);
+            replaceSpan.setStatus({
+              code: SpanStatusCode.ERROR,
+              message: (imageError as Error).message,
+            });
+            throw imageError; // Re-throw to be caught by outer try/catch
+          }
+        },
+      );
+    } catch (imageProcessingError) {
+      // This catch block handles errors specifically from replaceImagePlaceholders
+      return handleGenerationError({
+        error: imageProcessingError,
+        span: context.rootSpan, // Root span for overall job failure
+        jobId: context.clientJobId,
+        dbPool: context.dbPool,
+        responseDetails: {
+          clientMessage: 'Error processing or selecting images for your store',
+          statusCode: 500,
+          dbErrorMessage: `Image processing failed: ${imageProcessingError instanceof Error ? imageProcessingError.message : String(imageProcessingError)}`,
+        },
+        operationContext: 'Image Placeholder Replacement',
+      });
+    }
+    imageReplacementTimeMs = Date.now() - imageReplacementStartTime;
+    console.log(
+      `Image placeholder replacement took ${imageReplacementTimeMs}ms`,
+    );
+    console.log(
+      'Final JSON after image replacement:',
+      util.inspect(finalJsonWithImages, {
+        showHidden: false,
+        depth: null,
+        colors: true,
+      }),
+    );
 
-    // --- Call YNS API ---
+    // Update job to images_resolved
+    await updateJobToImagesResolved(
+      context.dbPool,
+      context.clientJobId,
+      finalJsonWithImages, // This is the full_json with resolved image URLs
+      context.rootSpan,
+    );
+
+    // --- YNS API Call ---
+    const ynsApiCallStartTime = Date.now();
     const ynsApiUrl = `${process.env.NEXT_PUBLIC_YNS_API_URL}/admin/ai-test/import?userId=${userId}`;
     console.log(`Calling YNS API: ${ynsApiUrl}`);
     const ynsApiKey = process.env.YNS_AI_API_KEY;
@@ -588,7 +658,7 @@ Ensure the entire output is a single, valid JSON object. Remember to output ONLY
           'Content-Type': 'application/json',
           Authorization: `Bearer ${ynsApiKey}`,
         },
-        body: JSON.stringify(finalJson), // Send the JSON with injected themes and image URLs
+        body: JSON.stringify(finalJsonWithImages), // Send the JSON with injected themes and image URLs
       });
       const endTimeYnsApi = Date.now();
       ynsApiCallTimeMs = endTimeYnsApi - startTimeYnsApi;
@@ -615,60 +685,77 @@ Ensure the entire output is a single, valid JSON object. Remember to output ONLY
       const storeUrl = ynsData.url; // Assuming the response has a "domain" field
 
       // --- Save to generated_stores table ---
-      const heroImageUrlToSave = extractHeroImageUrl(finalJson);
-
-      if (!heroImageUrlToSave) {
-        console.error(
-          `Hero image URL could not be extracted for store generation (User: ${context.userId}, Prompt: "${context.userPrompt.substring(0, 50)}..."). Skipping database entry for generated_stores.`,
-        );
-      } else if (context.dbPool) {
-        // Use context
-        let dbClientForStoreSave: PoolClient | undefined;
-        try {
-          dbClientForStoreSave = await context.dbPool.connect(); // Use context
-          const insertQuery = `
-              INSERT INTO generated_stores (user_id, user_email, prompt_text, store_url, hero_image_url, final_store_json)
-              VALUES ($1, $2, $3, $4, $5, $6) RETURNING id;
-            `;
-          const startTimeDbSave = Date.now();
-          const result = await dbClientForStoreSave.query(insertQuery, [
-            context.userId, // Use context
-            context.userEmail, // Use context
-            context.userPrompt, // Use context
-            storeUrl,
-            heroImageUrlToSave,
-            JSON.stringify(finalJson),
-          ]);
-          const endTimeDbSave = Date.now();
-          databaseSaveTimeMs = endTimeDbSave - startTimeDbSave;
-
-          const newEntryId = result.rows[0]?.id;
-          console.log(
-            `Successfully saved generated store metadata for user ${context.userId} (Email: ${context.userEmail}). URL: ${storeUrl}. DB Entry ID: ${newEntryId}`,
+      // This section should only execute if the YNS API call was successful
+      // and we have a valid storeUrl.
+      if (storeUrl && typeof storeUrl === 'string') {
+        const heroImageUrl = extractHeroImageUrl(finalJsonWithImages);
+        if (!heroImageUrl) {
+          // Log a warning but don't fail the entire generation if hero image URL can't be found
+          // It might not be critical for the generated_stores record or might be handled by YNS defaults
+          console.warn(
+            `Could not extract hero_image_url from finalJsonWithImages for job ${context.clientJobId}. It will be NULL or default in generated_stores.`,
           );
-        } catch (dbError: any) {
-          // Explicitly type dbError
-          console.error(
-            'Failed to save generated store metadata to database. Store was created on YNS, but will not appear in "My Stores":',
-            dbError,
+          context.rootSpan.setAttribute(
+            'app.extractHeroImageUrl.warning',
+            'Hero image URL not found in final JSON',
           );
-          // Logged error, proceed to return success to user for store generation
-        } finally {
-          dbClientForStoreSave?.release();
         }
-      } else if (!context.dbPool) {
-        // Use context
+
+        const dbSaveStartTime = Date.now();
+        try {
+          const dbClientForSave = await context.dbPool.connect();
+          try {
+            await dbClientForSave.query(
+              `INSERT INTO generated_stores (user_id, user_email, prompt_text, store_url, hero_image_url, final_store_json, created_at)
+               VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+              [
+                context.userId,
+                context.userEmail, // This can be null
+                context.userPrompt,
+                storeUrl,
+                heroImageUrl, // This can be null if not found
+                JSON.stringify(finalJsonWithImages), // Store the final JSON
+              ],
+            );
+            console.log(
+              `Store details saved to generated_stores for job ${context.clientJobId}.`,
+            );
+            databaseSaveTimeMs = Date.now() - dbSaveStartTime;
+          } finally {
+            dbClientForSave.release();
+          }
+        } catch (dbError) {
+          const dbSaveErrorMessage =
+            dbError instanceof Error ? dbError.message : String(dbError);
+          console.error(
+            `Error saving to generated_stores for job ${context.clientJobId}: ${dbSaveErrorMessage}`,
+          );
+          context.rootSpan.recordException(
+            dbError instanceof Error ? dbError : new Error(dbSaveErrorMessage),
+          );
+          context.rootSpan.setAttribute('db.generated_stores.save.error', true);
+          // Do not re-throw or return handleGenerationError here for generated_stores save failure.
+          // The primary generation is successful if YNS API call succeeded.
+          // This is a secondary logging/archival step.
+          databaseSaveTimeMs = `Error: ${dbSaveErrorMessage.substring(0, 100)}`;
+        }
+      } else {
+        // This case should ideally not be reached if YNS API call succeeded
+        // but storeUrl is somehow invalid. Log it if it happens.
         console.error(
-          'Database pool not available. Skipping save of generated store metadata.',
+          `YNS API call reported success but storeUrl is invalid for job ${context.clientJobId}. Skipping generated_stores save.`,
+        );
+        context.rootSpan.setAttribute(
+          'app.ynsApi.storeUrl.invalid',
+          'storeUrl missing or invalid after successful YNS call',
         );
       }
 
-      // Update job to full_ready. Errors here are logged by the helper but don't stop the flow.
-      await updateJobToFullReady(
+      // Update job to store_ready (this was previously full_ready)
+      await updateJobToStoreReady(
         context.dbPool,
         context.clientJobId,
-        finalJson,
-        storeUrl,
+        storeUrl || 'error: storeUrl not retrieved', // Pass storeUrl, provide fallback for safety
         context.rootSpan,
       );
 
@@ -691,8 +778,8 @@ Latency Summary for Request (User: ${logIdentifier}):
 
       return NextResponse.json({
         storeUrl: storeUrl,
-        storeJson: finalJson, // Return the modified JSON (which now includes injected themes and replaced images)
-        generationTimeMs: totalJsonGenerationTimeMs, // This is now the end-to-end JSON gen time
+        storeJson: finalJsonWithImages, // Return the modified JSON (which now includes injected themes and replaced images)
+        generationTimeMs: llmTextGenerationTimeMs, // This is now the end-to-end JSON gen time
         imageReplacementTimeMs: imageReplacementTimeMs, // Specific time for image replacement
       });
     } catch (ynsApiError) {
