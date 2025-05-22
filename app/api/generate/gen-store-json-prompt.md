@@ -473,7 +473,11 @@ Our interaction will consist of two tasks:
      "heroDescription": "A concise and compelling description for the Hero Section, inviting users to explore."
    }
    ```
-   Generate creative and relevant content for these two fields based on the user's store idea. Please respond ONLY with this simple JSON for this first task, with no other text, explanation, or markdown formatting (like ```) surrounding it.
+   Generate creative and relevant content for these two fields based on the user's store idea:
+   - `heroTitle`: 1-4 words, maximum 25 characters
+   - `heroDescription`: 1 sentence, or 2 very short sentences, maximum 60 characters
+
+   Please respond ONLY with this simple JSON for this first task, with no other text, explanation, or markdown formatting (like ```) surrounding it.
 
 2️⃣ **Second Task (Next Turn):**
    After I confirm receipt of this initial hero content, I will provide it back to you. I will then ask you to generate the complete store JSON. In that second task, you will be required to use the exact `heroTitle` and `heroDescription` you provided in this first task when constructing the main HeroSection. You will also generate all other paths, sections, settings, and products according to the full original instructions provided earlier in this document. Specifically:
