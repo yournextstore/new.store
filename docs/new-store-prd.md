@@ -1182,10 +1182,16 @@ The existing single main prompt file will be used, with a specific instruction a
         - Display a progress bar or status messages for `store_skeleton_ready`, `image_processing`, and `images_resolved`. (Client could optionally use `full_json` from `store_skeleton_ready` or `images_resolved` for richer previews if desired).
         - Load the final store using `store_url` or show an error message upon `store_ready` or `failed`.
         - Stop polling on terminal states.
-- [ ] **Task 6: Observability & Logging**
+- [ ] **Task 6: Fast-track Hero Image**
+  Extend turn 1 of the prompt to include a description of the hero image we want to generate. This will be used to lookup stock hero image using a fast
+  embedding-based lookup. We'll have a fast-tracked candidate for hero image that we'll display in the preview.
+    - Modify the prompt to instruct the LLM to generate a hero image description.
+    - Use the hero image description to lookup a stock image using a fast embedding-based lookup.
+    - Return hero image URL in the polling response.
+- [ ] **Task 7: Observability & Logging**
     - Add distinct OpenTelemetry spans for "LLM Turn 1 (Hero)", "LLM Turn 2 (Full Store Skeleton)", "Image Processing Loop", and "YNS Sync".
     - Log database interaction timings for `generation_jobs` updates for each status.
-- [ ] **Task 7: Quality Assurance**
+- [ ] **Task 8: Quality Assurance**
     - Test various scenarios: successful generation through all new statuses, LLM errors, image processing failures, network interruptions.
     - Verify instruction obedience by the LLM and the effectiveness of the server-side Hero splicing.
     - Verify correct status progression (`queued` -> `hero_json_ready` -> `store_skeleton_ready` -> [`image_processing` ->] `images_resolved` -> `store_ready` or `failed`) and data storage in `generation_jobs` for all intermediate steps.
