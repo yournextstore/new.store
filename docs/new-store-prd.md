@@ -1176,7 +1176,7 @@ The existing single main prompt file will be used, with a specific instruction a
     - Return the status and relevant data as JSON.
     - Implement the polling loop to call the `/status` endpoint.
     - Add a simple frontend component to test the new endpoint. Perhaps a simple component that displays the current status? Some kind of label or a progress bar?
-- [ ] **Task 5: Frontend Integration**
+- [x] **Task 5: Frontend Integration**
     - Update UI based on polled status:
         - Render Hero section content when `status = 'hero_json_ready'` (using `hero_json`).
         - Display a progress bar or status messages for `store_skeleton_ready`, `image_processing`, and `images_resolved`. (Client could optionally use `full_json` from `store_skeleton_ready` or `images_resolved` for richer previews if desired).

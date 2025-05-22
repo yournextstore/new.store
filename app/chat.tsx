@@ -9,9 +9,11 @@ import type { User } from 'better-auth';
 import { useEffect, useState } from 'react';
 import SyntaxHighlighter from 'react-syntax-highlighter';
 import { okaidia } from 'react-syntax-highlighter/dist/esm/styles/prism';
-
-// Import the GenerationJobStatus type
-import type { GenerationJobStatus } from '@/lib/generation-job-tracker'; // Using @ alias
+import type { GenerationJobStatus } from '@/lib/generation-job-tracker';
+import {
+  StoreGenerationProgress,
+  type HeroData,
+} from '@/app/components/store-generation-progress';
 
 const Timer = () => {
   const [start, setStart] = useState(0);
@@ -60,10 +62,7 @@ export const ChatInner = ({ user }: { user: User }) => {
   // New states for progressive feedback
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
   const [jobStatus, setJobStatus] = useState<GenerationJobStatus | null>(null);
-  const [heroPreview, setHeroPreview] = useState<{
-    heroTitle?: string;
-    heroDescription?: string;
-  } | null>(null);
+  const [currentHeroJson, setCurrentHeroJson] = useState<HeroData | null>(null);
 
   const handleGenerate = async () => {
     setIsLoading(true);
@@ -73,7 +72,7 @@ export const ChatInner = ({ user }: { user: User }) => {
     setGenerationTime(null);
     setCurrentJobId(null);
     setJobStatus(null);
-    setHeroPreview(null);
+    setCurrentHeroJson(null);
 
     const newJobId = crypto.randomUUID();
     setCurrentJobId(newJobId);
@@ -122,7 +121,7 @@ export const ChatInner = ({ user }: { user: User }) => {
   useEffect(() => {
     if (!currentJobId) {
       setJobStatus(null);
-      setHeroPreview(null);
+      setCurrentHeroJson(null);
       return;
     }
 
@@ -163,10 +162,20 @@ export const ChatInner = ({ user }: { user: User }) => {
         }
 
         if (statusData.status === 'hero_ready' && statusData.hero_json) {
-          setHeroPreview({
-            heroTitle: statusData.hero_json.heroTitle,
-            heroDescription: statusData.hero_json.heroDescription,
-          });
+          const rawHeroJson = statusData.hero_json;
+          const hardcodedHeroImageUrlForLuxuryCandlesStore =
+            'https://ydwmassfcxbi4xdn.public.blob.vercel-storage.com/generated/wotwKVRyTS46UOJtMBiXs_3915773e23eb472e8bdf97afd27674b2.jpg';
+          // Transform API response to the new simplified HeroData interface
+          const transformedHeroData: HeroData = {
+            title: rawHeroJson.heroTitle || rawHeroJson.title, // Prefer heroTitle from API
+            description: rawHeroJson.heroDescription || rawHeroJson.description, // Prefer heroDescription
+            imageUrl:
+              rawHeroJson.heroImageUrl ||
+              hardcodedHeroImageUrlForLuxuryCandlesStore, // we're using hardcoded image for now while developing the progress UI;
+            //we'll implement the actual image from the API (/api/generate/[job_id]/status) soon
+            imageAltText: rawHeroJson.heroImageAlt || rawHeroJson.image?.alt,
+          };
+          setCurrentHeroJson(transformedHeroData);
         } else if (statusData.status !== 'hero_ready') {
           // Clear hero preview if not in hero_ready state anymore (e.g. progresses to store_ready)
           // setHeroPreview(null); // Decided against this for now to keep hero info visible if it was shown
@@ -354,111 +363,82 @@ export const ChatInner = ({ user }: { user: User }) => {
                 Generating store... <Timer />
               </span>
             )}
-            {generationTime !== null &&
-              !isLoading && ( // Show generation time only when not loading
-                <span className="text-sm text-gray-600">
-                  Generated in {(generationTime / 1000).toFixed(2)}s
-                </span>
-              )}
-          </div>
-          {/* New Status Display Area Start - Placed below the timer/gen time */}
-          {currentJobId &&
-            jobStatus &&
-            jobStatus !== 'store_ready' &&
-            isLoading && (
-              <div className="my-2 p-3 border rounded-md bg-gray-100 text-sm text-gray-800 shadow-sm">
-                <p className="font-semibold">
-                  Progress (Job: {currentJobId.substring(0, 8)}...):{' '}
-                  <span className="font-mono bg-gray-200 px-1 rounded">
-                    {jobStatus}
-                  </span>
-                </p>
-                {jobStatus === 'hero_ready' && heroPreview && (
-                  <div className="mt-1 pt-1 pl-2 border-l-2 border-gray-300">
-                    {heroPreview.heroTitle && (
-                      <p className="text-xs">
-                        <span className="font-medium">Hero Title:</span>{' '}
-                        {heroPreview.heroTitle}
-                      </p>
-                    )}
-                    {heroPreview.heroDescription && (
-                      <p className="text-xs">
-                        <span className="font-medium">Hero Desc:</span>{' '}
-                        {heroPreview.heroDescription}
-                      </p>
-                    )}
-                    <p className="text-xs italic mt-1 text-gray-600">
-                      Full store generation in progress...
-                    </p>
-                  </div>
-                )}
-                {jobStatus === 'queued' && (
-                  <p className="text-xs italic text-gray-600">
-                    Waiting for processing to start...
-                  </p>
-                )}
-                {jobStatus === 'failed' && error && (
-                  <p className="text-xs text-red-600">Error: {error}</p>
-                )}
-              </div>
+            {generationTime !== null && !isLoading && (
+              <span className="text-sm text-gray-600">
+                Generated in {(generationTime / 1000).toFixed(2)}s
+              </span>
             )}
-          {/* New Status Display Area End */}
-          <div className="border rounded-md bg-gray-50 overflow-auto flex flex-col flex-1 mt-2">
-            {' '}
-            {/* Added mt-2 for spacing */}
-            <TabsContent value="json">
-              {responseJson ? (
-                <div className="grow overflow-auto mb-4">
-                  {' '}
-                  {/* Allow syntax highlighter to scroll, add margin bottom */}
-                  <SyntaxHighlighter
-                    language="json"
-                    style={okaidia}
-                    customStyle={{ margin: 0, flexGrow: 1 }}
-                    wrapLongLines={true}
-                  >
-                    {JSON.stringify(responseJson, null, 2)}
-                  </SyntaxHighlighter>
-                </div>
-              ) : (
-                !isLoading &&
-                !error && (
-                  <p className="text-gray-500">
-                    API response will appear here...
-                  </p>
-                )
-              )}
-            </TabsContent>
-            {/* Display Store URL Link Below JSON */}
-            <TabsContent value="preview" className="flex flex-col flex-1">
-              {storeUrl ? (
-                <>
-                  <a
-                    href={storeUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-neutral-600 px-8 py-1 hover:underline break-all flex"
-                  >
-                    {storeUrl}
-                  </a>
-                  <div className="border-t flex-1 flex h-full">
-                    <iframe
-                      src={storeUrl}
-                      title="Store Preview"
-                      className="w-full flex-1 border-0"
-                    />
-                  </div>
-                </>
-              ) : (
-                !isLoading &&
-                !error && (
-                  <p className="text-gray-500">
-                    Your ready to use store will appear here
-                  </p>
-                )
-              )}
-            </TabsContent>
           </div>
+          {currentJobId &&
+          jobStatus &&
+          jobStatus !== 'store_ready' &&
+          jobStatus !== 'failed' &&
+          isLoading ? (
+            <div className="border rounded-md bg-gray-50 overflow-auto flex flex-col flex-1 mt-2 items-center justify-center">
+              <StoreGenerationProgress
+                jobStatus={jobStatus}
+                heroData={currentHeroJson}
+                errorMsg={error}
+              />
+            </div>
+          ) : jobStatus === 'failed' && error && !isLoading ? (
+            <div className="border rounded-md bg-red-50 text-red-700 overflow-auto flex flex-col flex-1 mt-2 p-4 items-center justify-center">
+              <h3 className="font-bold text-lg">Generation Failed</h3>
+              <p>{error}</p>
+            </div>
+          ) : (
+            <div className="border rounded-md bg-gray-50 overflow-auto flex flex-col flex-1 mt-2">
+              <TabsContent value="json">
+                {responseJson ? (
+                  <div className="grow overflow-auto mb-4">
+                    <SyntaxHighlighter
+                      language="json"
+                      style={okaidia}
+                      customStyle={{ margin: 0, flexGrow: 1 }}
+                      wrapLongLines={true}
+                    >
+                      {JSON.stringify(responseJson, null, 2)}
+                    </SyntaxHighlighter>
+                  </div>
+                ) : (
+                  !isLoading &&
+                  !error && (
+                    <p className="text-gray-500 p-4">
+                      API response will appear here...
+                    </p>
+                  )
+                )}
+              </TabsContent>
+              <TabsContent value="preview" className="flex flex-col flex-1">
+                {storeUrl ? (
+                  <>
+                    <a
+                      href={storeUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-neutral-600 px-4 py-2 hover:underline break-all flex bg-background border-b"
+                    >
+                      {storeUrl}
+                    </a>
+                    <div className="border-t flex-1 flex h-full">
+                      <iframe
+                        src={storeUrl}
+                        title="Store Preview"
+                        className="w-full flex-1 border-0"
+                      />
+                    </div>
+                  </>
+                ) : (
+                  !isLoading &&
+                  !error && (
+                    <p className="text-gray-500 p-4">
+                      Your ready to use store will appear here
+                    </p>
+                  )
+                )}
+              </TabsContent>
+            </div>
+          )}
         </Tabs>
       </div>
     </div>
