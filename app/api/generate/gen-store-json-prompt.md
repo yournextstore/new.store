@@ -464,18 +464,20 @@ To achieve this, our interaction will proceed in two distinct tasks as detailed 
 Our interaction will consist of two tasks:
 
 1️⃣ **First Task (This Turn):**
-   Based on the user's overall store concept (derived from their main prompt: `{user_prompt}`), you will generate **ONLY** a simple JSON object containing a suggested `heroTitle` and a `heroDescription` for the store's homepage Hero Section.
+   Based on the user's overall store concept (derived from their main prompt: `{user_prompt}`), you will generate **ONLY** a simple JSON object containing a suggested `heroTitle`, a `heroDescription`, and a `heroImageDescription` for the store's homepage Hero Section.
 
    The JSON output for this first task **must** be a valid JSON object strictly adhering to this structure:
    ```json
    {
      "heroTitle": "A Creative and Engaging Title for the Hero Section",
-     "heroDescription": "A concise and compelling description for the Hero Section, inviting users to explore."
+     "heroDescription": "A concise and compelling description for the Hero Section, inviting users to explore.",
+     "heroImageDescription": "A factual, 1-2 sentence description of the desired hero image, focusing on subject, colors, and key visual elements relevant to the store's theme. This will be used for an image lookup."
    }
    ```
-   Generate creative and relevant content for these two fields based on the user's store idea:
-   - `heroTitle`: 1-4 words, maximum 25 characters
-   - `heroDescription`: 1 sentence, or 2 very short sentences, maximum 60 characters
+   Generate creative and relevant content for these three fields based on the user's store idea:
+   - `heroTitle`: 1-4 words, maximum 25 characters.
+   - `heroDescription`: 1 sentence, or 2 very short sentences, maximum 60 characters.
+   - `heroImageDescription`: 1-2 factual sentences (max 150 characters) describing the desired hero image. Focus on key visual elements (subject, main colors, style) that would help find a suitable stock image via semantic search. Example for a coffee store: "A close-up of freshly roasted coffee beans spilling from a burlap sack, with warm lighting."
 
    Please respond ONLY with this simple JSON for this first task, with no other text, explanation, or markdown formatting (like ```) surrounding it.
 
@@ -488,4 +490,4 @@ Our interaction will consist of two tasks:
    - Ensure the JSON is syntactically correct and includes all required fields.
    - Ensure the output is a single, valid JSON object. Output **only the raw JSON content**, starting with { and ending with }, with no other text, explanation, or markdown formatting (like ```) surrounding it.
 
-**Important: For this current turn, please focus ONLY on the First Task (This Turn) described above: generating the `heroTitle` and `heroDescription` as a simple JSON object.**
+**Important: For this current turn, please focus ONLY on the First Task (This Turn) described above: generating the `heroTitle`, `heroDescription`, and `heroImageDescription` as a simple JSON object.**

@@ -28,7 +28,27 @@ const FALLBACK_IMAGE_URL = 'https://via.placeholder.com/300'; // Use a generic p
 const COSINE_DISTANCE_THRESHOLD = 1 - SIMILARITY_THRESHOLD; // pgvector uses distance
 
 // --- Database Query Function ---
-async function findImageInDB(
+/**
+ * Finds an image in the database based on a textual description and type,
+ * optionally filtering by layout alignment for hero images.
+ *
+ * @param description - The textual description of the image to search for.
+ *   Used to generate an embedding for similarity search.
+ * @param imageType - Specifies the type of image to search for:
+ *   - 'hero': Searches for hero images. Behavior is further modified by the `alignment` parameter.
+ *   - 'product': Searches for product images. The `alignment` parameter is ignored.
+ * @param alignment - Optional. For 'hero' images, specifies the desired layout alignment ('left' | 'right').
+ *   - If provided for a 'hero' image, the search prioritizes images matching this `layout_hint`.
+ *     It first looks for matches above a similarity threshold and then falls back to the best match
+ *     for that alignment regardless of threshold.
+ *   - If `undefined` (or not provided) for a 'hero' image, the function performs a broader search
+ *     for the best semantically matching hero image based *only* on the description, ignoring `layout_hint`.
+ *     This mode is suitable for fast previews where a specific alignment is not yet known or required.
+ *   - This parameter is ignored if `imageType` is 'product'.
+ * @param heliconeContext - Optional. Context for Helicone logging, including user and session identifiers.
+ * @returns A `Promise` that resolves to the `blob_url` (string) of the best-matching image, or `null` if no suitable image is found or an error occurs.
+ */
+export async function findImageInDB(
   description: string,
   imageType: 'hero' | 'product',
   alignment?: 'left' | 'right',
@@ -65,63 +85,88 @@ async function findImageInDB(
 
     try {
       if (imageType === 'hero') {
-        if (!alignment) {
-          console.warn('Hero image search called without alignment. Skipping.');
-          return null;
-        }
-        // Query 1: Image Type + Alignment + Threshold
-        const query1 = `
-          SELECT blob_url
-          FROM images
-          WHERE image_type = $1 -- Use explicit type column
-            AND layout_hint = $2
-            AND source = 'static' -- Ensure it's from the library build
-            AND embedding <=> $3::vector < $4
-          ORDER BY embedding <=> $3::vector ASC
-          LIMIT 1;
-        `;
-        const result1 = await client.query(query1, [
-          imageType, // Pass 'hero'
-          alignment,
-          embeddingString,
-          COSINE_DISTANCE_THRESHOLD,
-        ]);
-
-        if (result1.rows.length > 0) {
-          bestMatchUrl = result1.rows[0].blob_url;
-          console.debug(
-            `DB Hero Match (Type+Align+Thresh): Found ${bestMatchUrl} for alignment ${alignment}`,
-          );
-        } else {
-          // Query 2: Image Type + Alignment Only (Fallback 1)
-          console.debug(
-            `DB Hero Fallback 1: Searching type "${imageType}" alignment "${alignment}" without threshold...`,
-          );
-          const query2 = `
+        // If alignment is provided, use the existing logic with alignment
+        if (alignment) {
+          // Query 1: Image Type + Alignment + Threshold
+          const query1 = `
             SELECT blob_url
             FROM images
             WHERE image_type = $1 -- Use explicit type column
               AND layout_hint = $2
               AND source = 'static' -- Ensure it's from the library build
+              AND embedding <=> $3::vector < $4
             ORDER BY embedding <=> $3::vector ASC
             LIMIT 1;
           `;
-          const result2 = await client.query(query2, [
+          const result1 = await client.query(query1, [
             imageType, // Pass 'hero'
             alignment,
             embeddingString,
+            COSINE_DISTANCE_THRESHOLD,
           ]);
-          if (result2.rows.length > 0) {
-            bestMatchUrl = result2.rows[0].blob_url;
+
+          if (result1.rows.length > 0) {
+            bestMatchUrl = result1.rows[0].blob_url;
             console.debug(
-              `DB Hero Match (Type+Align Only): Found ${bestMatchUrl} for alignment ${alignment}`,
+              `DB Hero Match (Type+Align+Thresh): Found ${bestMatchUrl} for alignment ${alignment}`,
             );
           } else {
+            // Query 2: Image Type + Alignment Only (Fallback 1)
             console.debug(
-              `DB Hero Fallback 2: No match found for type "${imageType}" alignment "${alignment}".`,
+              `DB Hero Fallback 1: Searching type "${imageType}" alignment "${alignment}" without threshold...`,
             );
-            // Fallback 3: Maybe just find *any* hero image matching description?
-            // Consider adding another fallback layer if needed.
+            const query2 = `
+              SELECT blob_url
+              FROM images
+              WHERE image_type = $1 -- Use explicit type column
+                AND layout_hint = $2
+                AND source = 'static' -- Ensure it's from the library build
+              ORDER BY embedding <=> $3::vector ASC
+              LIMIT 1;
+            `;
+            const result2 = await client.query(query2, [
+              imageType, // Pass 'hero'
+              alignment,
+              embeddingString,
+            ]);
+            if (result2.rows.length > 0) {
+              bestMatchUrl = result2.rows[0].blob_url;
+              console.debug(
+                `DB Hero Match (Type+Align Only): Found ${bestMatchUrl} for alignment ${alignment}`,
+              );
+            } else {
+              console.debug(
+                `DB Hero Fallback 2: No match found for type "${imageType}" alignment "${alignment}".`,
+              );
+              // Fallback 3: Consider finding *any* hero image matching description IF alignment was specified but no match found.
+              // This could be another query here, or a decision to let it return null.
+            }
+          }
+        } else {
+          // No alignment provided (e.g., for fast Turn 1 preview)
+          // Query for best hero image based on description only, ignoring layout_hint and threshold for speed.
+          console.debug(
+            `DB Hero (No Align): Searching type "${imageType}" by description only...`,
+          );
+          const queryNoAlign = `
+            SELECT blob_url
+            FROM images
+            WHERE image_type = $1 -- Use explicit type column
+              AND source = 'static' -- Ensure it's from the library build
+            ORDER BY embedding <=> $2::vector ASC
+            LIMIT 1;
+          `;
+          const resultNoAlign = await client.query(queryNoAlign, [
+            imageType, // Pass 'hero'
+            embeddingString,
+          ]);
+          if (resultNoAlign.rows.length > 0) {
+            bestMatchUrl = resultNoAlign.rows[0].blob_url;
+            console.debug(`DB Hero Match (No Align): Found ${bestMatchUrl}`);
+          } else {
+            console.debug(
+              `DB Hero Match (No Align): No hero image found for description "${description.substring(0, 50)}..."`,
+            );
           }
         }
       } else if (imageType === 'product') {

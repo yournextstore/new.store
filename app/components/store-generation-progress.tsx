@@ -30,7 +30,7 @@ const STATUS_STEP_MAP: Record<
   queued: { index: 0, label: 'Preparing your request' },
   hero_ready: { index: 1, label: 'Generating hero section' },
   store_skeleton_ready: { index: 2, label: 'Building store structure' },
-  image_processing: { index: 3, label: 'Processing images' },
+  image_processing: { index: 3, label: 'Generating product images' },
   images_resolved: { index: 4, label: 'Finalizing content' },
   store_ready: { index: 5, label: 'Store is ready!' }, // This state typically means the component is hidden
   failed: { index: 6, label: 'Generation failed' }, // This state also means component might be hidden or show error

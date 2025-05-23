@@ -26,6 +26,7 @@ import {
   updateJobToStoreReady,
 } from '../../../lib/generation-job-tracker';
 
+import { findImageInDB } from '../../lib/image'; // Corrected import path for Task 6
 import { SELECTED_MODEL, MODEL_CONFIGS } from './ai-model-config'; // Added import
 
 const tracer = trace.getTracer('ai-generate-route-tracer');
@@ -367,7 +368,11 @@ export async function POST(req: Request) {
     console.log(`LLM Turn 1 (Hero Content) took ${llmTurn1DurationMs}ms`);
     console.log('Raw LLM Turn 1 Response (heroContentText):', heroContentText);
 
-    let heroContentTurn1: { heroTitle?: string; heroDescription?: string };
+    let heroContentTurn1: {
+      heroTitle?: string;
+      heroDescription?: string;
+      heroImageDescription?: string; // Added for Task 6
+    };
     try {
       const cleanedHeroContentText = heroContentText
         .trim()
@@ -376,10 +381,11 @@ export async function POST(req: Request) {
       heroContentTurn1 = JSON.parse(cleanedHeroContentText);
       if (
         typeof heroContentTurn1.heroTitle !== 'string' ||
-        typeof heroContentTurn1.heroDescription !== 'string'
+        typeof heroContentTurn1.heroDescription !== 'string' ||
+        typeof heroContentTurn1.heroImageDescription !== 'string' // Added for Task 6
       ) {
         throw new Error(
-          'heroTitle or heroDescription missing or not strings in Turn 1 response.',
+          'heroTitle, heroDescription, or heroImageDescription missing or not strings in Turn 1 response.',
         );
       }
     } catch (parseError) {
@@ -403,11 +409,49 @@ export async function POST(req: Request) {
       'Parsed LLM Turn 1 Output (heroContentTurn1):',
       heroContentTurn1,
     );
+
+    // --- [Task 6] Fast Hero Image Lookup ---
+    let actualHeroImageUrl: string | null = null;
+    if (heroContentTurn1.heroImageDescription) {
+      try {
+        console.log(
+          `Attempting to find hero image for description: "${heroContentTurn1.heroImageDescription}" for job ${context.clientJobId}`,
+        );
+        actualHeroImageUrl = await findImageInDB(
+          heroContentTurn1.heroImageDescription,
+          'hero', // imageType
+          undefined, // alignment - findImageInDB should ideally handle this gracefully or be updated
+          context.heliconeContext, // Pass heliconeContext
+        );
+        console.log(
+          `Looked up hero image. URL: ${actualHeroImageUrl ?? 'Not found'}`,
+        );
+      } catch (lookupError) {
+        console.error('Hero image lookup failed:', lookupError);
+        // Adhering to existing error handling pattern:
+        // Log, record exception on span, set attribute, and continue.
+        context.rootSpan.recordException(
+          lookupError instanceof Error
+            ? lookupError
+            : new Error(String(lookupError)),
+        );
+        context.rootSpan.setAttribute('app.heroImageLookup.error', true);
+        // actualHeroImageUrl remains null, which is the desired fallback.
+      }
+    }
+    // --- End [Task 6] Fast Hero Image Lookup ---
+
     // Update job to hero_ready. Errors here are logged by the helper but don't stop the flow.
+    const heroJsonForDb = {
+      heroTitle: heroContentTurn1.heroTitle,
+      heroDescription: heroContentTurn1.heroDescription,
+      heroImageUrl: actualHeroImageUrl, // This will be null if lookup failed or no description
+    };
+
     await updateJobToHeroReady(
       context.dbPool,
       context.clientJobId,
-      heroContentTurn1,
+      heroJsonForDb, // Pass the object with the resolved image URL
       context.rootSpan,
     );
 

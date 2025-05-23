@@ -163,17 +163,12 @@ export const ChatInner = ({ user }: { user: User }) => {
 
         if (statusData.status === 'hero_ready' && statusData.hero_json) {
           const rawHeroJson = statusData.hero_json;
-          const hardcodedHeroImageUrlForLuxuryCandlesStore =
-            'https://ydwmassfcxbi4xdn.public.blob.vercel-storage.com/generated/wotwKVRyTS46UOJtMBiXs_3915773e23eb472e8bdf97afd27674b2.jpg';
           // Transform API response to the new simplified HeroData interface
           const transformedHeroData: HeroData = {
-            title: rawHeroJson.heroTitle || rawHeroJson.title, // Prefer heroTitle from API
-            description: rawHeroJson.heroDescription || rawHeroJson.description, // Prefer heroDescription
-            imageUrl:
-              rawHeroJson.heroImageUrl ||
-              hardcodedHeroImageUrlForLuxuryCandlesStore, // we're using hardcoded image for now while developing the progress UI;
-            //we'll implement the actual image from the API (/api/generate/[job_id]/status) soon
-            imageAltText: rawHeroJson.heroImageAlt || rawHeroJson.image?.alt,
+            title: rawHeroJson.heroTitle, // Directly use heroTitle from Turn 1
+            description: rawHeroJson.heroDescription, // Directly use heroDescription from Turn 1
+            imageUrl: rawHeroJson.heroImageUrl || null, // Use heroImageUrl from Turn 1, fallback to null if not present
+            imageAltText: rawHeroJson.heroTitle || 'Hero image preview', // Use heroTitle as alt text, or a generic fallback
           };
           setCurrentHeroJson(transformedHeroData);
         } else if (statusData.status !== 'hero_ready') {

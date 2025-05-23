@@ -1182,7 +1182,7 @@ The existing single main prompt file will be used, with a specific instruction a
         - Display a progress bar or status messages for `store_skeleton_ready`, `image_processing`, and `images_resolved`. (Client could optionally use `full_json` from `store_skeleton_ready` or `images_resolved` for richer previews if desired).
         - Load the final store using `store_url` or show an error message upon `store_ready` or `failed`.
         - Stop polling on terminal states.
-- [ ] **Task 6: Fast-track Hero Image**
+- [x] **Task 6: Fast-track Hero Image**
   Extend turn 1 of the prompt to include a description of the hero image we want to generate. This will be used to lookup stock hero image using a fast
   embedding-based lookup. We'll have a fast-tracked candidate for hero image that we'll display in the preview.
     - Modify the prompt to instruct the LLM to generate a hero image description.
