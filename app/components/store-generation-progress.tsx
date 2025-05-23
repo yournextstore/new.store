@@ -59,17 +59,36 @@ export function StoreGenerationProgress({
   useEffect(() => {
     if (!jobStatus) {
       setCurrentStepIndex(0);
-      setCurrentStepLabel('Waiting...');
       setIsTerminalState(false);
       return;
     }
 
-    const stepInfo = STATUS_STEP_MAP[jobStatus];
-    setCurrentStepIndex(stepInfo.index);
-    setCurrentStepLabel(stepInfo.label);
+    const statusInfo = STATUS_STEP_MAP[jobStatus];
+    let newActiveStepIndex = statusInfo.index;
+
+    if (jobStatus === 'hero_ready') {
+      newActiveStepIndex = STATUS_STEP_MAP.store_skeleton_ready.index;
+    } else if (jobStatus === 'store_skeleton_ready') {
+      newActiveStepIndex = STATUS_STEP_MAP.image_processing.index;
+    }
+
+    setCurrentStepIndex(newActiveStepIndex);
+
+    if (newActiveStepIndex <= TOTAL_VISIBLE_STEPS) {
+      const activeDisplayStep = displaySteps.find(
+        (step) => step.index === newActiveStepIndex,
+      );
+      if (activeDisplayStep) {
+        setCurrentStepLabel(activeDisplayStep.label);
+      }
+    } else if (jobStatus === 'store_ready' || jobStatus === 'failed') {
+      setCurrentStepLabel(statusInfo.label);
+    }
 
     if (jobStatus === 'store_ready' || jobStatus === 'failed') {
       setIsTerminalState(true);
+    } else {
+      setIsTerminalState(false);
     }
   }, [jobStatus]);
 
