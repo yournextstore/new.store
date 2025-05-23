@@ -157,7 +157,6 @@ export async function findImageInDB(
               embedding <=> $2::vector AS distance -- Select distance for debugging
             FROM images
             WHERE image_type = $1 -- Use explicit type column
-              AND source = 'static' -- Ensure it's from the library build
             ORDER BY distance ASC
             LIMIT ${debugTopN ? 5 : 1}; -- Fetch 5 if debugging, else 1
           `;
