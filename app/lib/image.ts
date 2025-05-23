@@ -46,6 +46,7 @@ const COSINE_DISTANCE_THRESHOLD = 1 - SIMILARITY_THRESHOLD; // pgvector uses dis
  *     This mode is suitable for fast previews where a specific alignment is not yet known or required.
  *   - This parameter is ignored if `imageType` is 'product'.
  * @param heliconeContext - Optional. Context for Helicone logging, including user and session identifiers.
+ * @param debugTopN - Optional. If true, and for hero images with no alignment, log the top 5 candidates with descriptions and scores, but still return only the best match.
  * @returns A `Promise` that resolves to the `blob_url` (string) of the best-matching image, or `null` if no suitable image is found or an error occurs.
  */
 export async function findImageInDB(
@@ -53,6 +54,7 @@ export async function findImageInDB(
   imageType: 'hero' | 'product',
   alignment?: 'left' | 'right',
   heliconeContext?: HeliconeRequestContext,
+  debugTopN = false,
 ): Promise<string | null> {
   if (!pool) {
     console.error('Database pool is not initialized. Cannot query images.');
@@ -149,19 +151,34 @@ export async function findImageInDB(
             `DB Hero (No Align): Searching type "${imageType}" by description only...`,
           );
           const queryNoAlign = `
-            SELECT blob_url
+            SELECT
+              blob_url,
+              description AS image_description,  -- Select description for debugging
+              embedding <=> $2::vector AS distance -- Select distance for debugging
             FROM images
             WHERE image_type = $1 -- Use explicit type column
               AND source = 'static' -- Ensure it's from the library build
-            ORDER BY embedding <=> $2::vector ASC
-            LIMIT 1;
+            ORDER BY distance ASC
+            LIMIT ${debugTopN ? 5 : 1}; -- Fetch 5 if debugging, else 1
           `;
           const resultNoAlign = await client.query(queryNoAlign, [
             imageType, // Pass 'hero'
             embeddingString,
           ]);
+
+          if (debugTopN && resultNoAlign.rows.length > 0) {
+            console.debug(
+              `[DEBUG Hero Lookup Top 5 for "${description.substring(0, 50)}..."]`,
+            );
+            resultNoAlign.rows.forEach((row, index) => {
+              console.debug(
+                `  ${index + 1}. URL: ${row.blob_url}, Desc: "${row.image_description}", Distance: ${row.distance}`,
+              );
+            });
+          }
+
           if (resultNoAlign.rows.length > 0) {
-            bestMatchUrl = resultNoAlign.rows[0].blob_url;
+            bestMatchUrl = resultNoAlign.rows[0].blob_url; // Still return only the top one
             console.debug(`DB Hero Match (No Align): Found ${bestMatchUrl}`);
           } else {
             console.debug(
