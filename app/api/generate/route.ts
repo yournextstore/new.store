@@ -422,7 +422,6 @@ export async function POST(req: Request) {
           'hero', // imageType
           undefined, // alignment - findImageInDB should ideally handle this gracefully or be updated
           context.heliconeContext, // Pass heliconeContext
-          true, // <--- Set debugTopN to true for logging top 5 candidates
         );
         console.log(
           `Looked up hero image. URL: ${actualHeroImageUrl ?? 'Not found'}`,
