@@ -3,6 +3,7 @@ import {
   Schema,
   type Node as ProsemirrorNode,
   type MarkSpec,
+  type NodeSpec,
   DOMParser,
 } from 'prosemirror-model';
 import { schema } from 'prosemirror-schema-basic';
@@ -16,7 +17,8 @@ import ReactMarkdown from 'react-markdown';
 import { diffEditor, DiffType } from '@/lib/editor/diff';
 
 const diffSchema = new Schema({
-  nodes: addListNodes(schema.spec.nodes, 'paragraph block*', 'block'),
+  // Type assertion needed due to prosemirror-schema-list having its own nested prosemirror-model types
+  nodes: addListNodes(schema.spec.nodes as Parameters<typeof addListNodes>[0], 'paragraph block*', 'block') as unknown as OrderedMap<NodeSpec>,
   marks: OrderedMap.from({
     ...schema.spec.marks.toObject(),
     diffMark: {
