@@ -1,20 +1,17 @@
-import type { NextConfig } from 'next';
+import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
-  experimental: {
-    ppr: true,
-  },
   images: {
     remotePatterns: [
       {
-        hostname: 'avatar.vercel.sh',
+        hostname: "avatar.vercel.sh",
       },
       {
-        protocol: 'https',
-        hostname: 'ydwmassfcxbi4xdn.public.blob.vercel-storage.com',
+        protocol: "https",
+        hostname: "ydwmassfcxbi4xdn.public.blob.vercel-storage.com",
         // port is optional, default is ''
         // pathname is optional, default is '/**'
       },
