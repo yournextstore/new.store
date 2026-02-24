@@ -6,22 +6,14 @@
  * It may also coordinate with image generation services if stock images are not found or if generation is explicitly requested.
  */
 
-// import { openai } from '@ai-sdk/openai'; // To be removed
-import { heliconeOpenAI } from './ai-providers'; // Import new provider
+import { openAI } from './ai-providers';
 import { pool } from '@/lib/db';
 import { embed } from 'ai';
 import { processSinglePlaceholder } from './image-generation'; // Assuming image-generation.ts is in the same app/lib directory
 import type { GenerationMode } from './image-generation';
-import type { HeliconeRequestContext } from './request-context';
 
 // --- Constants & Types ---
-// TODO: If specific Helicone headers (e.g., user ID, session ID) are needed for embedding calls,
-// consider how to propagate them to this point or if a generic set of headers is sufficient.
-// For now, using heliconeOpenAI() without dynamic headers, relying on defaults in ai-providers.ts.
-const EMBEDDING_MODEL = heliconeOpenAI().embedding('text-embedding-3-small');
-// This constant defines WHICH embedding model to use via our Helicone-configured provider.
-// The actual Helicone headers (static from ai-providers.ts and dynamic per call)
-// are handled when `heliconeOpenAI()` is called or when `embed()` is called with options.
+const EMBEDDING_MODEL = openAI().embedding('text-embedding-3-small');
 
 const SIMILARITY_THRESHOLD = 0.45; // Adjust as needed
 const FALLBACK_IMAGE_URL = 'https://via.placeholder.com/300'; // Use a generic placeholder URL if no match found
@@ -45,7 +37,6 @@ const COSINE_DISTANCE_THRESHOLD = 1 - SIMILARITY_THRESHOLD; // pgvector uses dis
  *     for the best semantically matching hero image based *only* on the description, ignoring `layout_hint`.
  *     This mode is suitable for fast previews where a specific alignment is not yet known or required.
  *   - This parameter is ignored if `imageType` is 'product'.
- * @param heliconeContext - Optional. Context for Helicone logging, including user and session identifiers.
  * @param debugTopN - Optional. If true, and for hero images with no alignment, log the top 5 candidates with descriptions and scores, but still return only the best match.
  * @returns A `Promise` that resolves to the `blob_url` (string) of the best-matching image, or `null` if no suitable image is found or an error occurs.
  */
@@ -53,7 +44,6 @@ export async function findImageInDB(
   description: string,
   imageType: 'hero' | 'product',
   alignment?: 'left' | 'right',
-  heliconeContext?: HeliconeRequestContext,
   debugTopN = false,
 ): Promise<string | null> {
   if (!pool) {
@@ -65,19 +55,9 @@ export async function findImageInDB(
   let bestMatchUrl: string | null = null;
 
   try {
-    const perCallHeaders: Record<string, string> = {};
-    if (heliconeContext?.userId)
-      perCallHeaders['Helicone-User-Id'] = heliconeContext.userId;
-    if (heliconeContext?.userEmail)
-      perCallHeaders['Helicone-Property-user-email'] =
-        heliconeContext.userEmail;
-    if (heliconeContext?.vercelRequestId)
-      perCallHeaders['Helicone-Session-Id'] = heliconeContext.vercelRequestId;
-
     const { embedding } = await embed({
       model: EMBEDDING_MODEL,
       value: description,
-      headers: perCallHeaders,
     });
 
     // Format the embedding array into the string format pgvector expects
@@ -251,7 +231,6 @@ export async function replaceImagePlaceholders(
   json: any,
   imageMode: GenerationMode,
   imageStyle?: string | null,
-  heliconeContext?: HeliconeRequestContext,
 ): Promise<any> {
   if (!pool) {
     console.warn('Database pool not available. Skipping image replacement.');
@@ -412,7 +391,6 @@ export async function replaceImagePlaceholders(
           description,
           imageType,
           alignmentForDbLookup, // This is 'left' | 'right' | undefined
-          heliconeContext,
         );
         if (stockMatchUrl) {
           targetObject[targetKey] = stockMatchUrl;
@@ -449,7 +427,6 @@ export async function replaceImagePlaceholders(
             imageType,
             alignmentForGeneration, // This is 'left' | 'right' | 'center' for heroes
             imageType === 'product' ? imageStyle : null, // imageStyle only for products
-            heliconeContext,
           );
 
           if (generationResult?.blobUrl) {
@@ -469,7 +446,6 @@ export async function replaceImagePlaceholders(
                 description,
                 'hero',
                 alignmentForDbLookup,
-                heliconeContext,
               );
               if (stockFallbackUrl) {
                 targetObject[targetKey] = stockFallbackUrl;

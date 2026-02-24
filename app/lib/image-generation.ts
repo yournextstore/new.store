@@ -1,13 +1,12 @@
 import { put } from '@vercel/blob';
 import path from 'node:path';
 import { embed, generateText } from 'ai'; // Added for embedding and text gen
-import { heliconeOpenAI } from './ai-providers'; // Import new provider
+import { openAI } from './ai-providers';
 import { pool } from '@/lib/db'; // Added for database access
 import { callGetImgApi } from './getimg-api';
 import { callFalAiTextToImage } from './fal-api';
 import { callOpenAiTextToImage } from './openai-image-api';
 import { calculateHash } from './utils';
-import type { HeliconeRequestContext } from './request-context';
 
 // --- Types and Constants ---
 // Define and EXPORT the generation modes type
@@ -18,18 +17,8 @@ export type GenerationMode =
   | 'openai-gpt-image-1';
 
 // --- Model Definitions ---
-// TODO: Regarding Helicone headers for EMBEDDING_MODEL related `embed` calls:
-// Similar to app/lib/image.ts, `embed` calls using this model can accept per-call headers
-// via `embed({ model, value }, { headers: perCallHeaders })` if dynamic context is available.
-// For now, it relies on static headers from `heliconeOpenAI()` in `ai-providers.ts`.
-const EMBEDDING_MODEL = heliconeOpenAI().embedding('text-embedding-3-small');
-
-// TODO: Regarding Helicone headers for SHORT_NAME_MODEL related `generateText` calls:
-// `generateText` calls can also accept per-call headers via an options object:
-// `generateText({ model, prompt }, { headers: perCallHeaders })`.
-// Alternatively, dynamic headers could be passed to `heliconeOpenAI(dynamicHeaders)(modelName)`.
-// For now, it relies on static headers from `heliconeOpenAI()` in `ai-providers.ts`.
-const SHORT_NAME_MODEL = heliconeOpenAI()('gpt-4o-mini');
+const EMBEDDING_MODEL = openAI().embedding('text-embedding-3-small');
+const SHORT_NAME_MODEL = openAI()('gpt-4o-mini');
 const SHORT_NAME_PROMPT_TEMPLATE =
   'Generate a very short (3-5 words) title or label for an image based on the following description: "{description}"';
 
@@ -76,12 +65,10 @@ async function downloadImageFromUrl(getimgUrl: string): Promise<{
 /**
  * Generates a short name for an image based on its description.
  * @param description The image description.
- * @param heliconeContext Optional Helicone request context.
  * @returns The generated short name, or null on failure.
  */
 async function generateShortName(
   description: string,
-  heliconeContext?: HeliconeRequestContext,
 ): Promise<string | null> {
   if (!description) return null;
   try {
@@ -89,14 +76,6 @@ async function generateShortName(
       '{description}',
       description,
     );
-    const perCallHeaders: Record<string, string> = {};
-    if (heliconeContext?.userId)
-      perCallHeaders['Helicone-User-Id'] = heliconeContext.userId;
-    if (heliconeContext?.userEmail)
-      perCallHeaders['Helicone-Property-user-email'] =
-        heliconeContext.userEmail;
-    if (heliconeContext?.vercelRequestId)
-      perCallHeaders['Helicone-Session-Id'] = heliconeContext.vercelRequestId;
 
     const { text } = await generateText({
       model: SHORT_NAME_MODEL,
@@ -104,7 +83,6 @@ async function generateShortName(
       system:
         'You are a helpful AI that generates short names for images. You output just the name, no other text.',
       maxTokens: 20,
-      headers: perCallHeaders,
     });
     return text.trim();
   } catch (error) {
@@ -116,28 +94,16 @@ async function generateShortName(
 /**
  * Generates an embedding for a given text description.
  * @param description The text description.
- * @param heliconeContext Optional Helicone request context.
  * @returns The embedding vector, or null on failure.
  */
 async function generateImageEmbedding(
   description: string,
-  heliconeContext?: HeliconeRequestContext,
 ): Promise<number[] | null> {
   if (!description) return null;
   try {
-    const perCallHeaders: Record<string, string> = {};
-    if (heliconeContext?.userId)
-      perCallHeaders['Helicone-User-Id'] = heliconeContext.userId;
-    if (heliconeContext?.userEmail)
-      perCallHeaders['Helicone-Property-user-email'] =
-        heliconeContext.userEmail;
-    if (heliconeContext?.vercelRequestId)
-      perCallHeaders['Helicone-Session-Id'] = heliconeContext.vercelRequestId;
-
     const { embedding } = await embed({
       model: EMBEDDING_MODEL,
       value: description,
-      headers: perCallHeaders,
     });
     return embedding;
   } catch (error) {
@@ -230,7 +196,6 @@ interface ProcessedImageResult {
  * @param imageType The type of the image.
  * @param alignment The alignment of the image.
  * @param imageStyle The image style (general style for product images consistent with the store concept).
- * @param heliconeContext Optional Helicone request context.
  * @returns A promise resolving to the ProcessedImageResult.
  */
 export async function processSinglePlaceholder(
@@ -239,7 +204,6 @@ export async function processSinglePlaceholder(
   imageType: 'product' | 'hero',
   alignment?: 'left' | 'right' | 'center' | null,
   imageStyle?: string | null,
-  heliconeContext?: HeliconeRequestContext,
 ): Promise<ProcessedImageResult> {
   // Variables to hold intermediate results
   let externalImageUrl: string | null = null; // URL from GetImg/Fal
@@ -406,7 +370,6 @@ export async function processSinglePlaceholder(
     // 5. Generate Embedding
     embedding = await generateImageEmbedding(
       placeholder.description,
-      heliconeContext,
     );
     if (!embedding) {
       console.warn(
@@ -417,7 +380,6 @@ export async function processSinglePlaceholder(
     // 6. Generate Short Name
     shortName = await generateShortName(
       placeholder.description,
-      heliconeContext,
     );
 
     // 7. Insert into Database (using the determined source and final details)

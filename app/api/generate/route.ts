@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { generateText, type LanguageModel } from 'ai';
-import { heliconeOpenAI, heliconeGoogle } from '../../lib/ai-providers';
+import { openAI, google } from '../../lib/ai-providers';
 import { trace, type Span, SpanStatusCode } from '@opentelemetry/api';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -13,7 +13,6 @@ import { pool } from '@/lib/db'; // Using @ alias for path
 import { auth } from '@/lib/auth'; // For getting user session
 import { headers } from 'next/headers'; // For getting headers for session
 import type { GoogleGenerativeAIProviderOptions } from '@ai-sdk/google';
-import type { HeliconeRequestContext } from '../../lib/request-context';
 import { nanoid } from 'nanoid';
 
 import { handleGenerationError } from '../../../lib/generation-error-handler';
@@ -38,34 +37,7 @@ interface GenerationRequestContext {
   userEmail: string | null;
   imageGenerationMode: GenerationMode;
   rootSpan: Span;
-  heliconeContext: HeliconeRequestContext;
   dbPool: Pool;
-}
-
-// Helper function to prepare Helicone headers
-function prepareHeliconeHeaders(
-  heliconeContext: HeliconeRequestContext,
-): Record<string, string> {
-  const headers: Record<string, string> = {}; // Initialize as empty
-
-  // These are always present in the context of this route, even if HeliconeRequestContext allows them to be optional generally
-  // However, to be safe and align with HeliconeRequestContext, we check.
-  if (typeof heliconeContext.vercelRequestId === 'string') {
-    headers['Helicone-Session-Id'] = heliconeContext.vercelRequestId;
-  }
-  // For this specific route, these are fixed values.
-  headers['Helicone-Session-Path'] = '/api/generate';
-  headers['Helicone-Session-Name'] = 'Store Generation';
-
-  if (typeof heliconeContext.userId === 'string') {
-    headers['Helicone-User-Id'] = heliconeContext.userId;
-  }
-
-  if (typeof heliconeContext.userEmail === 'string') {
-    headers['Helicone-Property-user-email'] = heliconeContext.userEmail;
-  }
-
-  return headers;
 }
 
 /*
@@ -220,15 +192,6 @@ export async function POST(req: Request) {
 
     console.log(`Using image generation mode: ${imageGenerationMode}`);
 
-    // --- Create HeliconeRequestContext (needed for GenerationRequestContext) ---
-    const vercelRequestId =
-      requestHeadersInternal.get('x-vercel-id') || `localhost-${nanoid(10)}`;
-    const heliconeCtxForContext: HeliconeRequestContext = {
-      vercelRequestId,
-      userId: userId,
-      userEmail: userEmail === null ? undefined : userEmail,
-    };
-
     // --- Crucial Validations before creating full context ---
     // User prompt validation (moved up before context creation that uses it)
     if (!userPrompt || typeof userPrompt !== 'string') {
@@ -269,7 +232,6 @@ export async function POST(req: Request) {
       userEmail: userEmail,
       imageGenerationMode: imageGenerationMode,
       rootSpan: rootSpan,
-      heliconeContext: heliconeCtxForContext,
       dbPool: pool,
     };
 
@@ -310,10 +272,6 @@ export async function POST(req: Request) {
     ); // Use context
     const overallJsonGenerationStartTime = Date.now();
 
-    const dynamicHeliconeHeaders = prepareHeliconeHeaders(
-      context.heliconeContext,
-    );
-
     // Conditional model initialization
     let modelInstance: LanguageModel;
     let selectedModelLogName: string;
@@ -321,22 +279,16 @@ export async function POST(req: Request) {
     const modelConfig = MODEL_CONFIGS[SELECTED_MODEL];
 
     if (modelConfig.provider === 'google') {
-      // Pass dynamic headers to the provider function
-      modelInstance = heliconeGoogle(dynamicHeliconeHeaders)(
-        modelConfig.modelName,
-      );
+      modelInstance = google()(modelConfig.modelName);
       selectedModelLogName = `Google Gemini (${modelConfig.modelName})`;
       console.log(
-        `Initializing Google Gemini model: ${modelConfig.modelName} via Helicone`,
+        `Initializing Google Gemini model: ${modelConfig.modelName}`,
       );
     } else if (modelConfig.provider === 'openai') {
-      // Pass dynamic headers to the provider function
-      modelInstance = heliconeOpenAI(dynamicHeliconeHeaders)(
-        modelConfig.modelName,
-      );
+      modelInstance = openAI()(modelConfig.modelName);
       selectedModelLogName = `OpenAI (${modelConfig.modelName})`;
       console.log(
-        `Initializing OpenAI model: ${modelConfig.modelName} via Helicone`,
+        `Initializing OpenAI model: ${modelConfig.modelName}`,
       );
     } else {
       throw new Error(`Unsupported model provider: ${modelConfig.provider}`);
@@ -420,8 +372,7 @@ export async function POST(req: Request) {
         actualHeroImageUrl = await findImageInDB(
           heroContentTurn1.heroImageDescription,
           'hero', // imageType
-          undefined, // alignment - findImageInDB should ideally handle this gracefully or be updated
-          context.heliconeContext, // Pass heliconeContext
+          undefined, // alignment
         );
         console.log(
           `Looked up hero image. URL: ${actualHeroImageUrl ?? 'Not found'}`,
@@ -603,8 +554,7 @@ Ensure the entire output is a single, valid JSON object. Remember to output ONLY
             const result = await replaceImagePlaceholders(
               themeAppliedJson,
               context.imageGenerationMode,
-              imageStyle, // Pass the extracted imageStyle. This can be string | null | undefined
-              context.heliconeContext,
+              imageStyle,
             );
             replaceSpan.setStatus({ code: SpanStatusCode.OK });
             return result;
@@ -814,7 +764,7 @@ Ensure the entire output is a single, valid JSON object. Remember to output ONLY
       console.log(`
 Latency Summary for Request (User: ${logIdentifier}):
 - AI Text Generation: ${formatMs(llmTextGenerationTimeMs)}
-- Image Processing (${context.imageGenerationMode}): ${formatMs(imageReplacementTimeMs)} 
+- Image Processing (${context.imageGenerationMode}): ${formatMs(imageReplacementTimeMs)}
 - YNS API Call: ${formatMs(ynsApiCallTimeMs)}
 - Database Save: ${formatMs(databaseSaveTimeMs)}
 `);
